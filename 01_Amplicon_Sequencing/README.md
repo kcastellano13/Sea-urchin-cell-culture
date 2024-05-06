@@ -1,4 +1,4 @@
-# Validating the identity of the cells in culture using 16S rDNA PCR and 18S rDNA targeted amplicon sequencing
+# Validating the identity of the cells in culture using 18S rDNA targeted amplicon sequencing
 
 1) QC raw data using FastQC v0.11.10.devel
 _script:_ _01_fastqc_rawdata.sh
