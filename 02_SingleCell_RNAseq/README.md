@@ -5,7 +5,7 @@
 - program: cellranger-6.1.2
 - script: 01_cellranger_mkfastq
 
-## 2. Convert L. variegatus genome into a cellranger reference
+## 2. Convert *L. variegatus* genome into a cellranger reference
 - genome: L. variegatus v3.0 ([GCF_018143015.1](https://www.ncbi.nlm.nih.gov/assembly/GCF_018143015.1))
 - program: cellranger-6.1.2
 - script: 02_cellranger_mkref.sh
