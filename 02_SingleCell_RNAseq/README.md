@@ -12,9 +12,10 @@
 
 ## 3. Count reads per GEM using cellranger count
 - This was run on each sample (3% FBS, 5% FBS, 10% FBS and 15% FBS) individually 
-    - program:_ cellranger version 6.1.2
-    - important flags:_ --expect cells flag = 10,000
-    - script:_ 03_cellranger_count.sh
+    - program: cellranger version 6.1.2
+    - important flag:
+        - --expect cells flag = 10,000
+    - script: 03_cellranger_count.sh
 
 ## 4. Differential Expression analyzed using Seurat v4.3.0 in R v.2023.09.1
 - R scripts for each sample can be found above:
