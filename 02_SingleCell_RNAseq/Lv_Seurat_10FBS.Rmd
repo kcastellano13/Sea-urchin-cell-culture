@@ -1,0 +1,692 @@
+---
+title: "L. variegatus Cell Culture - scRNA-seq wit Seurat - 10% FBS"
+output: 
+  html_document: 
+    fig_width: 10
+    fig_height: 10
+date: '2022-03-10'
+name: Kate Castellano
+editor_options: ---
+#https://satijalab.org/seurat/articles/merge_vignette.html
+#https://satijalab.org/seurat/articles/pbmc3k_tutorial.html
+---
+
+```{r read in file}
+library(dplyr)
+library(Seurat)
+library(patchwork)
+
+#Load data from cellranger
+Lv.10FBS <- Read10X(data.dir="10FBS_filtered_feature_bc_matrix/")
+```
+
+```{r make seurat object}
+# Initialize the Seurat object with the raw (non-normalized data).
+#min.cells: Include features detected in at least this many cells
+#min.features: Include cells where at least this many features are detected
+Lv10FBS <- CreateSeuratObject(counts = Lv.10FBS, project = "10FBS", min.cells = 3, min.features = 200)
+Lv10FBS
+#An object of class Seurat 
+#17718 features across 3416 samples within 1 assay 
+#Active assay: RNA (17718 features, 0 variable features)
+```
+
+```{r QC,pre-processing}
+# The [[ operator can add columns to object metadata. This is a great place to stash QC stats
+#in L.var mitochondrial gene IDs start with "gene-DR311" - this will need to be modified for other genomes
+#calculates the percentage of counts originating from mitochondrial features
+Lv10FBS[["percent.mt"]] <- PercentageFeatureSet(Lv10FBS, pattern = "^gene-DR311")
+# Show QC metrics for the first 5 cells
+head(Lv10FBS@meta.data, 15)
+```
+
+```{r visualize QC metrics}
+# Visualize QC metrics as a violin plot
+VlnPlot(Lv10FBS, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+#manually save as TIFF and SVG: QC_features_10FBScounts
+
+#QC scatterplot
+plot1 <- FeatureScatter(Lv10FBS , feature1 = "nCount_RNA", feature2 = "percent.mt")
+plot2 <- FeatureScatter(Lv10FBS , feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+plot1 + plot2
+#manually save as TIFF and SVG: QC_features_10FBScounts_scatterplot
+```
+
+```{r remove outliers}
+#based on violin plot, remove super high and super low expressors
+#filter out cells that have unique feature counts over 4000 and less than 500 and cells with that have > 30% mitochondrial counts
+Lv10FBS <- subset(Lv10FBS, subset = nFeature_RNA > 500 & nFeature_RNA < 4000 & percent.mt < 30)
+
+#re-make violin plot
+VlnPlot(Lv10FBS, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+#manually save as TIFF and SVG: QC_features_10FBScounts_500-4000_30mt
+```
+
+```{r Normalize}
+#LogNormalize: Feature counts for each cell are divided by the total counts for that cell and multiplied by the scale.factor. This is then natural-log transformed using log1p
+Lv10FBS <- NormalizeData(Lv10FBS, normalization.method = "LogNormalize", scale.factor = 10000)
+```
+
+```{r Identify highly variable features}
+#We next calculate a subset of features that exhibit high cell-to-cell variation in the dataset (i.e, they are highly expressed in some cells, and lowly expressed in others). We and others have found that focusing on these genes in downstream analysis helps to highlight biological signal in single-cell datasets.
+
+Lv10FBS <- FindVariableFeatures(Lv10FBS, selection.method = "vst", nfeatures = 2000)
+
+# Identify the 10 most highly variable genes
+top10 <- head(VariableFeatures(Lv10FBS), 10)
+
+# plot variable features with and without labels
+plot1 <- VariableFeaturePlot(Lv10FBS)
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+plot1 + plot2
+
+#didnt do this but this is how to do it
+#on server made a list of gene IDs from this graph and pulled our gene names using:
+#grep -Fw -f highly_variable_seurat.txt Lvariegatus_geneID_geneName.tsv > highly_variable_seurat_withGeneName.txt
+#nothing interesting of note
+```
+
+```{r scaling data}
+#Next, we apply a linear transformation (‘scaling’) that is a standard pre-processing step prior to dimensional reduction techniques like PCA. The ScaleData() function:
+
+#shifts the expression of each gene, so that the mean expression across cells is 0
+#scales the expression of each gene, so that the variance across cells is 1
+#This step gives equal weight in downstream analyses, so that highly-expressed genes do not dominate
+#The results of this are stored in pbmc[["RNA"]]@scale.data
+
+all.genes <- rownames(Lv10FBS)
+Lv10FBS <- ScaleData(Lv10FBS, features = all.genes)
+```
+
+```{r linear dimensional reduction}
+#Next we perform PCA on the scaled data. By default, only the previously determined variable features are used as input, but can be defined using features argument if you wish to choose a different subset
+Lv10FBS <- RunPCA(Lv10FBS, features = VariableFeatures(object = Lv10FBS))
+
+# Examine and visualize PCA results a few different ways
+print(Lv10FBS[["pca"]], dims = 1:5, nfeatures = 5)
+
+#visualize PCA
+VizDimLoadings(Lv10FBS, dims = 1:2, reduction = "pca")
+
+#visualize PCA #2
+DimPlot(Lv10FBS, reduction = "pca") + NoLegend()
+
+#visualize heatmap
+DimHeatmap(Lv10FBS, dims = 1:5, cells = 500, balanced = TRUE)
+```
+
+```{r determine dimensionality}
+#An alternative heuristic method generates an ‘Elbow plot’: a ranking of principle components based on the percentage of variance explained by each one (ElbowPlot() function). 
+#I dont see a clear elbow except maybe right before 15 when it started to level off so chose 16 as my PC cutoff
+ElbowPlot(Lv10FBS, ndims = 40)
+#manually saved as TIFF and SVG: 10FBS_elbowplot_dimensionality
+
+###The elbow plot is helpful when determining how many PCs we need to capture the majority of the variation in the data. The elbow plot visualizes the standard deviation of each PC. Where the elbow appears is usually the threshold for identifying the majority of the variation. However, this method can be a bit subjective about where the elbow is located. Try a more quantitative approach
+#https://hbctraining.github.io/scRNA-seq/lessons/elbow_plot_metric.html
+
+###1. The point where the principal components only contribute 5% of standard deviation and the principal components cumulatively contribute 90% of the standard deviation.###
+# Determine percent of variation associated with each PC
+pct <- Lv10FBS[["pca"]]@stdev / sum(Lv10FBS[["pca"]]@stdev) * 100
+
+# Calculate cumulative percents for each PC
+cumu <- cumsum(pct)
+
+# Determine which PC exhibits cumulative percent greater than 90% and % variation associated with the PC as less than 5
+co1 <- which(cumu > 90 & pct < 5)[1]
+
+co1
+#The first metric returns PC43 as the PC matching these requirements
+
+###2. The point where the percent change in variation between the consecutive PCs is less than 0.1%.###
+# Determine the difference between variation of PC and subsequent PC
+co2 <- sort(which((pct[1:length(pct) - 1] - pct[2:length(pct)]) > 0.1), decreasing = T)[1] + 1
+
+# last point where change of % of variation is more than 0.1%.
+co2
+#This second metric returns PC12. Usually, we would choose the minimum of these two metrics as the PCs covering the majority of the variation in the data.
+
+# Minimum of the two calculation
+pcs <- min(co1, co2)
+
+pcs
+#Based on these metrics, for the clustering of cells in Seurat we will use the first 12 PCs to generate the clusters.
+
+##We can plot the elbow plot again and overlay the information determined using our metrics:
+# Create a dataframe with values
+plot_df <- data.frame(pct = pct, 
+           cumu = cumu, 
+           rank = 1:length(pct))
+
+# Elbow plot to visualize 
+  ggplot(plot_df, aes(cumu, pct, label = rank, color = rank > pcs)) + 
+  geom_text() + 
+  geom_vline(xintercept = 90, color = "grey") + 
+  geom_hline(yintercept = min(pct[pct > 5]), color = "grey") +
+  theme_bw() +
+  ggsave("quantitativeElbowPlot.svg")
+```
+
+```{r Cluster the cells}
+#picked 16 base don elbow plot
+Lv10FBS <- FindNeighbors(Lv10FBS, dims = 1:12)
+Lv10FBS <- FindClusters(Lv10FBS, resolution = 0.5)
+
+#Modularity Optimizer version 1.3.0 by Ludo Waltman and Nees Jan van Eck
+#with mitochondrial genes
+#Number of nodes: 19447
+#Number of edges: 494674
+
+#removing mitochondrial genes
+#Number of nodes: 3390
+#Number of edges: 115850
+
+#write data to file
+#library(data.table)
+#data_to_write_out <- as.data.frame(as.matrix(Lv10FBS@assays$RNA@scale.data))
+#fwrite(x = data_to_write_out, row.names = TRUE, file = "LV10FBS_scale.data.csv")
+```
+
+
+```{r non-linear dimensional reduction (tSNE)}
+Lv10FBSTSNE <- RunTSNE(Lv10FBS, dims = 1:12)
+
+#visualize t-SNE plot
+DimPlot(Lv10FBSTSNE, reduction = "tsne")
+#manually saved as TIFF and SVG:cellclusters_10FBS_tSNE
+
+DimPlot(Lv10FBSTSNE, reduction = "tsne", label = TRUE)
+#manually saved as TIFF and SVG: cellclusters_10FBS_tSNE_labels
+```
+
+```{r }
+###Final Cell Marker Graphs###
+setwd("C:/Users/kate.castellano/OneDrive - Gloucester Marine Genomics Institute/Documents/KCastellano/SeaUrchin/SeaUrchin_Data/10x_seaurchin/Seurat_10FBS/2024_MarchAnalysis_mitoFilter")
+getwd()
+
+
+#Pigment: homeobox_protein_six1-like, probable_polyketide_synthase_1
+#shows log normalized data
+VlnPlot(Lv10FBS, features = c("LOC121418887", "LOC121428528"))
+dev.copy(png, "violinPlot_10FBS_pigmentMarkers.png", width = 900, height = 700)
+dev.off()
+
+dev.copy(svg, "violinPlot_10FBS_pigmentMarkers.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "violinPlot_10FBS_pigmentmMarkers.tiff", width = 900, height = 700)
+dev.off()
+
+FeaturePlot(Lv10FBSTSNE, features = c("LOC121418887", "LOC121428528"))
+
+dev.copy(png, "featurePlot_10FBS_pigmentmMarkers.png", width = 900, height = 700)
+dev.off()
+
+dev.copy(svg, "featurePlot_10FBS_pigmentmMarkerrs.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "featurePlot_10FBS_pigmentmMarkers.tiff", width = 900, height = 700)
+dev.off()
+
+##Stemness Markers##
+#protein_maelstrom_homolog, piwi-like_protein_1, piwi-like_protein_1, eEF1A_lysine_and_N-terminal_methyltransferase-like, protein_nanos-like, probable_ATP-dependent_RNA_helicase_DDX4, probable_ATP-dependent_RNA_helicase_DDX4
+
+VlnPlot(Lv10FBS, features = c("LOC121420310", "LOC121408762", "LOC121431753", "LOC121428667", "LOC121408828", "LOC121423730", "LOC121424246"))
+
+dev.copy(png, "violinPlot_10FBS_stemMarkers.png", width = 900, height = 700)
+dev.off()
+
+dev.copy(svg, "violinPlot_10FBS_stemMarkers.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "violinPlot_10FBS_stemMarkers.tiff", width = 900, height = 700)
+dev.off()
+
+
+FeaturePlot(Lv10FBSTSNE, features = c("LOC121420310", "LOC121408762", "LOC121431753", "LOC121428667", "LOC121408828", "LOC121423730", "LOC121424246"))
+
+dev.copy(png, "featurePlot_10FBS_stemMarkers.png", width = 900, height = 700)
+dev.off()
+
+dev.copy(svg, "featurePlot_10FBS_stemMarkers.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "featurePlot_10FBS_stemMarkers.tiff", width = 900, height = 800)
+dev.off()
+
+##Proliferation Markers##
+#proliferating_cell_nuclear_antigen-like, myc_protein-like, telomerase_reverse_transcriptase-like, telomerase_protein_component_1-like, telomerase_protein_component_1-like, PIN2/TERF1-interacting_telomerase_inhibitor_1-like, PIN2/TERF1-interacting_telomerase_inhibitor_1-like, G2/mitotic-specific_cyclin-A-like, G2/mitotic-specific_cyclin-A-like
+VlnPlot(Lv10FBSTSNE, features = c("LOC121431754", "LOC121430677", "LOC121429790", "LOC121412153", "LOC121424081", "LOC121417261", "LOC121417323", "LOC121410426", "LOC121409442"))
+
+dev.copy(png, "violinPlot_10FBS_prolifMarkers_1.png", width = 900, height = 700)
+dev.off()
+
+dev.copy(svg, "violinPlot_10FBS_prolifMarkers_1.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "violinPlot_10FBS_prolifmMarkers_1.tiff", width = 900, height = 700)
+dev.off()
+
+
+FeaturePlot(Lv10FBSTSNE, features = c("LOC121431754", "LOC121430677", "LOC121429790", "LOC121412153", "LOC121424081", "LOC121417261", "LOC121417323", "LOC121410426", "LOC121409442"))
+
+dev.copy(png, "featurePlot_10FBS_prolifMarkers_1.png", width = 900, height = 800)
+dev.off()
+
+dev.copy(svg, "featurePlot_10FBS_prolifMarkers_1.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "featurePlot_10FBS_prolifmMarkers_1.tiff", width = 900, height = 800)
+dev.off()
+
+
+#G2/mitotic-specific_cyclin-B-like, G2/mitotic-specific_cyclin-B3-like, G2/mitotic-specific_cyclin_S13-7-like, G1/S-specific_cyclin-D1-like, G1/S-specific_cyclin-E, G1/S-specific_cyclin-D1-like, cyclin-D-binding_Myb-like_transcription_factor_1, cyclin-D-binding_Myb-like_transcription_factor_1, G1/S-specific_cyclin-E, S_phase_cyclin_A-associated_protein_in_the_endoplasmic_reticulum-like
+VlnPlot(Lv10FBS, features = c("LOC121416277", "LOC121429467", "LOC121419378", "LOC121405827", "LOC121408084", "LOC121405827", "LOC121410996", "LOC121413797", "LOC121408084", "LOC121415132"))
+
+dev.copy(png, "violinPlot_10FBS_prolifMarkers_2.png", width = 900, height = 800)
+dev.off()
+
+dev.copy(svg, "violinPlot_10FBS_prolifMarkers_2.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "violinPlot_10FBS_prolifmMarkers_2.tiff", width = 900, height = 800)
+dev.off()
+
+FeaturePlot(Lv10FBSTSNE, features = c("LOC121416277", "LOC121429467", "LOC121419378", "LOC121405827", "LOC121408084", "LOC121405827", "LOC121410996", "LOC121413797", "LOC121408084", "LOC121415132"))
+
+dev.copy(png, "featurePlot_10FBS_prolifMarkers_2.png", width = 900, height = 800)
+dev.off()
+
+dev.copy(svg, "featurePlot_10FBS_prolifMarkers_2.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "featurePlot_10FBS_prolifmMarkers_2.tiff", width = 900, height = 800)
+dev.off()
+
+
+##Neuronal Markers##
+#notch, synaptotagmin-1-like, synaptotagmin-1-like, synaptotagmin-6-like, synaptotagmin-12-like, synaptotagmin-14-like, neurofilament_heavy_polypeptide-like, neurofilament_heavy_polypeptide-like, neurofilament_heavy_polypeptide-like, neurofilament_heavy_polypeptide-like
+
+VlnPlot(Lv10FBS, features = c("LOC447795", "LOC121410540", "LOC121405894", "LOC121405860", "LOC121406212", "LOC121418961", "LOC121414907", "LOC121424392", "LOC121424392", "LOC121424392"))
+
+dev.copy(png, "violinPlot_10FBS_neuronalMarkers_1.png", width = 900, height = 800)
+dev.off()
+
+dev.copy(svg, "violinPlot_10FBS_neuronalMarkers_1.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "violinPlot_10FBS_neuronalMarkers_1.tiff", width = 900, height = 800)
+dev.off()
+
+
+FeaturePlot(Lv10FBSTSNE, features = c("LOC447795", "LOC121410540", "LOC121405894", "LOC121405860", "LOC121406212", "LOC121418961", "LOC121414907", "LOC121424392", "LOC121424392", "LOC121424392"))
+
+dev.copy(png, "featurePlot_10FBS_neuronalMarkers_1.png", width = 900, height = 800)
+dev.off()
+
+dev.copy(svg, "featurePlot_10FBS_neuronalMarkers_1.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "featurePlot_10FBS_neuronalMarkers_1.tiff", width = 900, height = 800)
+dev.off()
+
+#neurofilament_heavy_polypeptide-like, neurofilament_heavy_polypeptide-like, neurofilament_medium_polypeptide-like, metabotropic_glutamate_receptor_3-like, hyalin, hyalin-like, hyalin-like, hyalin-like, neuronal_acetylcholine_receptor_subunit_alpha-3-like, neural_proliferation_differentiation_and_control_protein_1-like
+
+VlnPlot(Lv10FBS, features = c("LOC121424392", "LOC121432068", "LOC121425197", "LOC121429617", "LOC446193", "LOC121419137", "LOC121421150", "LOC121425550", "LOC121429806", "LOC121429231"))
+
+dev.copy(png, "violinPlot_10FBS_neuronalMarkers_2.png", width = 900, height = 800)
+dev.off()
+
+dev.copy(svg, "violinPlot_10FBS_neuronalMarkers_2.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "violinPlot_10FBS_neuronalmarkers_2.tiff", width = 900, height = 800)
+dev.off()
+
+
+FeaturePlot(Lv10FBSTSNE, features = c("LOC121424392", "LOC121432068", "LOC121425197", "LOC121429617", "LOC446193", "LOC121419137", "LOC121421150", "LOC121425550", "LOC121429806", "LOC121429231"))
+
+dev.copy(png, "featurePlot_10FBS_neuronalMarkers_2.png", width = 900, height = 800)
+dev.off()
+
+dev.copy(svg, "featurePlot_10FBS_neuronalMarkers_2.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "featurePlot_10FBS_neuronalmarkers_2.tiff", width = 900, height = 800)
+dev.off()
+
+##ectoderm markers##
+#transcription_factor_HES-1-like, transcription_factor_HES-1-A-like, transcription_factor_HES-4-like, chordin-like
+
+VlnPlot(Lv10FBS, features = c("LOC121427522", "LOC121427235", "LOC121427575", "LOC121427607"))
+dev.copy(png, "violinPlot_10FBS_ectodermlMarkers.png", width = 900, height = 800)
+dev.off()
+
+dev.copy(svg, "violinPlot_10FBS_ectodermMarkers.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "violinPlot_10FBS_ectodermMarkers.tiff", width = 900, height = 800)
+dev.off()
+
+FeaturePlot(Lv10FBSTSNE, features = c("LOC121427522", "LOC121427235", "LOC121427575", "LOC121427607"))
+dev.copy(png, "featurePlot_10FBS_ectodermlMarkers.png", width = 900, height = 800)
+dev.off()
+
+dev.copy(svg, "featurePlot_10FBS_ectodermMarkers.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "featurePlot_10FBS_ectodermMarkers.tiff", width = 900, height = 800)
+dev.off()
+
+##Skeleton Markers##
+#mesenchyme-specific_cell_surface_glycoprotein-like, mesenchyme-specific_cell_surface_glycoprotein-like, mesenchyme-specific_cell_surface_glycoprotein-like, 34_kDa_spicule_matrix_protein, 41_kDa_spicule_matrix_protein-like, 30_kDa_spicule_matrix_protein_alpha-like
+VlnPlot(Lv10FBS, features = c("LOC121428121", "LOC121428213", "LOC121427215", "LOC121405815", "LOC121405817", "LOC121406020"))
+
+dev.copy(png, "violinPlot_10FBS_skeletonMarkers_1.png", width = 900, height = 800)
+dev.off()
+
+dev.copy(svg, "violinPlot_10FBS_skeletonMarkers_1.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "violinPlot_10FBS_skeletonMarkers_1.tiff", width = 900, height = 800)
+dev.off()
+
+
+FeaturePlot(Lv10FBSTSNE, features = c("LOC121428121", "LOC121428213", "LOC121427215", "LOC121405815", "LOC121405817", "LOC121406020"))
+
+dev.copy(png, "featurePlot_10FBS_skeletonMarkers_1.png", width = 900, height = 800)
+dev.off()
+
+dev.copy(svg, "featurePlot_10FBS_skeletonMarkers_1.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "featurePlot_10FBS_skeletonMarkers_1.tiff", width = 900, height = 800)
+dev.off()
+
+#34_kDa_spicule_matrix_protein-like, 27_kDa_primary_mesenchyme-specific_spicule_protein-like, carbonic_anhydrase_1-like, carbonic_anhydrase-related_protein_10-like, beta_carbonic_anhydrase_1-like, carbonic_anhydrase_14-like
+VlnPlot(Lv10FBS, features = c("LOC121406031", "LOC121406034", "LOC121406846", "LOC121429170", "LOC121429566", "LOC121430996"))
+
+dev.copy(png, "violinPlot_10FBS_skeletonMarkers_2.png", width = 900, height = 800)
+dev.off()
+
+dev.copy(svg, "violinPlot_10FBS_skeletonMarkers_2.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "violinPlot_10FBS_skeletonMarkers_2.tiff", width = 900, height = 800)
+dev.off()
+
+
+FeaturePlot(Lv10FBSTSNE, features = c("LOC121406031", "LOC121406034", "LOC121406846", "LOC121429170", "LOC121429566", "LOC121430996"))
+
+dev.copy(png, "featurePlot_10FBS_skeletonMarkers_2.png", width = 900, height = 800)
+dev.off()
+
+dev.copy(svg, "featurePlot_10FBS_skeletonMarkers_2.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "featurePlot_10FBS_skeletonMarkers_2.tiff", width = 900, height = 800)
+dev.off()
+
+##Muscle Markers##
+#myosin_heavy_chain,_striated_muscle-like, myosin_light_chain_kinase,_smooth_muscle-like, myosin_light_chain_kinase,_smooth_muscle-like, broad_substrate_specificity_ATP-binding_cassette_transporter_ABCG2-like, myoblast_determination_protein_1_homolog
+
+VlnPlot(Lv10FBS, features = c("LOC121408547", "LOC121424934", "LOC121425215", "LOC121431580", "LOC121405674"))
+dev.copy(png, "violinPlot_10FBS_muscleMarkers.png", width = 900, height = 800)
+dev.off()
+
+dev.copy(svg, "violinPlot_10FBS_musclenMarkers.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "violinPlot_10FBS_muscleMarkers.tiff", width = 900, height = 800)
+dev.off()
+
+
+FeaturePlot(Lv10FBSTSNE, features = c("LOC121408547", "LOC121424934", "LOC121425215", "LOC121431580", "LOC121405674"))
+dev.copy(png, "featurePlot_10FBS_muscleMarkers.png", width = 900, height = 800)
+dev.off()
+
+dev.copy(svg, "featurePlot_10FBS_musclenMarkers.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "featurePlot_10FBS_muscleMarkers.tiff", width = 900, height = 800)
+dev.off()
+
+##Cilia Markers ##
+#tektin-1-like, tektin-4-like, tektin-3-like, tektin-B1-like
+
+VlnPlot(Lv10FBS, features = c("LOC121408954", "LOC121423108", "LOC121423323", "LOC121430708"))
+
+dev.copy(png, "violinPlot_10FBS_ciliaMarkers.png", width = 900, height = 800)
+dev.off()
+
+dev.copy(svg, "violinPlot_10FBS_ciliaMarkers.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "violinPlot_10FBS_ciliaMarkers.tiff", width = 900, height = 800)
+dev.off()
+
+
+FeaturePlot(Lv10FBSTSNE, features = c("LOC121408954", "LOC121423108", "LOC121423323", "LOC121430708"))
+
+dev.copy(png, "featurePlot_10FBS_ciliaMarkers.png", width = 900, height = 800)
+dev.off()
+
+dev.copy(svg, "featurePlot_10FBS_ciliaMarkers.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "featurePlot_10FBS_ciliaMarkers.tiff", width = 900, height = 800)
+dev.off()
+
+##endoderm##
+
+VlnPlot(Lv10FBS, features = c("LOC121406173", "LOC121428657", "LOC121419318"))
+dev.copy(png, "violinPlot_10FBS_endodermMarkers.png", width = 900, height = 800)
+dev.off()
+
+dev.copy(svg, "violinPlot_10FBS_endodermMarkers.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "violinPlot_10FBS_endodermMarkers.tiff", width = 900, height = 800)
+dev.off()
+
+
+FeaturePlot(Lv10FBSTSNE, features = c("LOC121406173", "LOC121428657", "LOC121419318"))
+
+dev.copy(png, "featurePlot_10FBS_endodermMarkers.png", width = 900, height = 800)
+dev.off()
+
+dev.copy(svg, "featurePlot_10FBS_endodermMarkers.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "featurePlot_10FBS_endodermMarkers.tiff", width = 900, height = 800)
+dev.off()
+
+##Receptors##
+
+#EGF
+VlnPlot(Lv10FBS, features = c("LOC121405695", "LOC121421295", "LOC121429013"))
+
+dev.copy(png, "violinPlot_10FBS_EGF.png", width = 900, height = 800)
+dev.off()
+
+dev.copy(svg, "violinPlot_10FBS_EGF.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "violinPlot_10FBS_EGF.tiff", width = 900, height = 800)
+dev.off()
+
+FeaturePlot(Lv10FBSTSNE, features = c("LOC121405695", "LOC121421295", "LOC121429013"))
+
+#FGF
+VlnPlot(Lv10FBS, features = c("LOC121415946", "LOC121419550", "LOC121425416", "LOC121425598", "LOC121425661", "LOC121429921", "LOC121431286"))
+
+dev.copy(png, "violinPlot_10FBS_FGF.png", width = 900, height = 800)
+dev.off()
+
+dev.copy(svg, "violinPlot_10FBS_FGF.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "violinPlot_10FBS_FGF.tiff", width = 900, height = 800)
+dev.off()
+
+
+FeaturePlot(Lv10FBSTSNE, features = c("LOC121415946", "LOC121419550", "LOC121425416", "LOC121425598", "LOC121425661", "LOC121429921", "LOC121431286"))
+
+dev.copy(png, "featurePlot_10FBS_FGF.png", width = 900, height = 800)
+dev.off()
+
+dev.copy(svg, "featurePlot_10FBS_FGF.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "featurePlot_10FBS_FGF.tiff", width = 900, height = 800)
+dev.off()
+
+#hepatocyte
+#all hepatocyte annotations
+#VlnPlot(Lv10FBS, features = c("LOC121407560", "LOC121407763", "LOC121408778", "LOC121410774", "LOC121419318", "LOC121422516", "LOC121426646", "LOC121428657"))
+
+#hepatocyte receptors
+VlnPlot(Lv10FBS, features = c("LOC121410774", "LOC121422516", "LOC121426646"))
+dev.copy(png, "violinPlot_10FBS_hepatocyte.png", width = 900, height = 800)
+dev.off()
+
+dev.copy(svg, "violinPlot_10FBS_hepatocyt.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "violinPlot_10FBS_hepatocyt.tiff", width = 900, height = 800)
+dev.off()
+
+
+FeaturePlot(Lv10FBSTSNE, features = c("LOC121410774", "LOC121422516", "LOC121426646"))
+dev.copy(png, "featurePlot_10FBS_hepatocyte.png", width = 900, height = 700)
+dev.off()
+
+dev.copy(svg, "featurePlot_10FBS_hepatocyt.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "featurePlot_10FBS_hepatocyt.tiff", width = 900, height = 700)
+```
+
+```{r }
+#Get the number of cells in each cluster
+library(data.table)
+library(magrittr)
+library(dplyr)
+
+#get the meta data and put it in a table
+md <- Lv10FBSTSNE@meta.data %>% as.data.table
+head(md)
+
+#get the total number of cells in each cluster
+table(Lv10FBSTSNE$seurat_clusters)
+```
+
+```{r Function to calculate percentage of cells expressing marker genes}
+# updated 1/31/2020 to accommodate V3.1
+# updated 2/4/2020 to output "NA" for genes not detected in certain subgroups
+#Function to get the percent of cells expressing a certain gene in each cluster
+#https://github.com/satijalab/seurat/issues/371
+
+PrctCellExpringGene <- function(object, genes, group.by = "all"){
+    if(group.by == "all"){
+        prct = unlist(lapply(genes,calc_helper, object=object))
+        result = data.frame(Markers = genes, Cell_proportion = prct)
+        return(result)
+    }
+
+    else{        
+        list = SplitObject(object, group.by)
+        factors = names(list)
+
+        results = lapply(list, PrctCellExpringGene, genes=genes)
+        for(i in 1:length(factors)){
+        results[[i]]$Feature = factors[i]
+        }
+        combined = do.call("rbind", results)
+        return(combined)
+    }
+}
+
+calc_helper <- function(object,genes){
+    counts = object[['RNA']]@counts
+    ncells = ncol(counts)
+    if(genes %in% row.names(counts)){
+    sum(counts[genes,]>0)/ncells*100
+    }else{return(NA)}
+}
+
+```
+
+```{r }
+#calculate the percentage of cells in ech cluster expressing certain genes (need function above)
+
+#proliferation markers
+d <- PrctCellExpringGene(Lv10FBSTSNE ,genes =c("LOC121409442","LOC121416277","LOC121405827","LOC121408084","LOC121415132", "LOC121410761", "LOC447791", "LOC121409919", "LOC121426230", "LOC121431754", "LOC121430677", "LOC121429790"), group.by = "seurat_clusters")
+write.csv(d, "10FBSPercCells_ProlifMarkers_2024March.csv", row.names=FALSE)
+
+#ectoderm
+d <- PrctCellExpringGene(Lv10FBSTSNE ,genes =c("LOC121427522", "LOC121427235", "LOC121427575", "LOC121427607", "LOC121420667", "LOC446163", "LOC121410373", "LOC446159", "LOC121430393", "LOC447795", "LOC121405894", "LOC121418961", "LOC121424392", "LOC121425197", "LOC121429617", "LOC446193", "LOC121429806", "LOC121429231"), group.by = "seurat_clusters")
+write.csv(d, "10FBSPercCells_ectodermMarkers_2024March.csv", row.names=FALSE)
+
+#endoderm
+d <- PrctCellExpringGene(Lv10FBSTSNE ,genes =c("LOC121406173", "LOC121428657", "LOC121419318"), group.by = "seurat_clusters")
+write.csv(d, "10FBSPercCells_endodermMarkers_2024March.csv", row.names=FALSE)
+
+#mesoderm
+d <- PrctCellExpringGene(Lv10FBSTSNE ,genes =c("LOC121408547", "LOC121424934", "LOC121425215", "LOC121406031", "LOC121406034", "LOC121406020", "LOC121406031", "LOC121428121"), group.by = "seurat_clusters")
+write.csv(d, "10FBSPercCells_mesodermMarkers_2024March.csv", row.names=FALSE)
+
+#germ cell
+d <- PrctCellExpringGene(Lv10FBSTSNE ,genes =c("LOC121408828", "LOC121408762", "LOC121431753", "LOC121424246", "LOC121420310"), group.by = "seurat_clusters")
+write.csv(d, "10FBSPercCells_germcellMarkers_2024March.csv", row.names=FALSE)
+
+#pigment
+d <- PrctCellExpringGene(Lv10FBSTSNE ,genes =c("LOC121428528" ,"LOC121418887"), group.by = "seurat_clusters")
+write.csv(d, "10FBSPercCells_pigmentMarkers_2024March.csv", row.names=FALSE)
+
+#cillia
+d <- PrctCellExpringGene(Lv10FBSTSNE ,genes =c("LOC121408954" ,"LOC121423108" ,"LOC121423323" ,"LOC121430708"), group.by = "seurat_clusters")
+write.csv(d, "10FBSPercCells_cilliaMarkers_2024March.csv", row.names=FALSE)
+
+#DNA polymerase genes
+d <- PrctCellExpringGene(Lv10FBSTSNE ,genes =c("LOC121429881", "LOC121408448", "LOC121428701"), group.by = "seurat_clusters")
+write.csv(d, "10FBSPercCells_dnapolyMarkers_2023Oct.csv", row.names=FALSE)
+```
+
+```{r }
+# This loop just runs the FindMarkers function on all of the clusters
+lapply(
+  levels(Lv10FBSTSNE[["seurat_clusters"]][[1]]),
+  function(x)FindMarkers(Lv10FBSTSNE,ident.1 = x,min.pct = 0.25)
+) -> cluster.markers
+
+# This adds the cluster number to the results of FindMarkers
+sapply(0:(length(cluster.markers)-1),function(x) {
+  cluster.markers[[x+1]]$gene <<- rownames(cluster.markers[[x+1]])
+  cluster.markers[[x+1]]$cluster <<- x
+})
+
+# Finally we collapse the list of hits down to a single table and sort it by FDR to put the most significant ones first
+as_tibble(do.call(rbind,cluster.markers)) %>% arrange(p_val_adj) -> cluster.markers
+cluster.markers
+
+#prints to file
+write.csv(cluster.markers, "10FBS_allClusters_Genes_2024March.csv")
+```
+
+```{r }
+#Get counts for each gene in each cluster
+setwd("C:/Users/kate.castellano/OneDrive - Gloucester Marine Genomics Institute/Documents/KCastellano/SeaUrchin/SeaUrchin_Data/10x_seaurchin/Seurat_10FBS/2024_MarchAnalysis_mitoFilter")
+matrix <- AverageExpression(object = Lv10FBSTSNE)$RNA
+write.csv(matrix, "Lv_10FBS_GeneCount_allClusters_2024March.csv")
+```
+
+```{r }
+#get average expression across all clusters for cell cycle genes (to compare to other conditions)
+
+markers <- AverageExpression(object = Lv10FBSTSNE, group.by = c('orig.ident'))$RNA
+
+#get specific cell cycle genes
+my_markers <- markers[c("LOC121409442", "LOC121416277", "LOC121405827", "LOC121408084", "LOC121415132", "LOC121429790", "LOC121430677", "LOC121431754", "LOC121429881", "LOC121408448", "LOC121428701", "LOC121408828", "LOC121408762", "LOC121431753", "LOC121424246", "LOC121420310"), ]
+my_markers
+
+```

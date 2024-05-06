@@ -1,0 +1,953 @@
+---
+title: "L. variegatus Cell Culture - scRNA-seq wit Seurat - 3% FBS"
+output: 
+  html_document: 
+    fig_width: 10
+    fig_height: 10
+date: '2022-03-10'
+name: Kate Castellano
+editor_options: 
+  chunk_output_type: inline
+---
+#https://satijalab.org/seurat/articles/merge_vignette.html
+#https://satijalab.org/seurat/articles/pbmc3k_tutorial.html
+
+```{r read in file}
+library(dplyr)
+library(Seurat)
+library(patchwork)
+
+#Load data from cellranger
+Lv.3FBS <- Read10X(data.dir="3FBS_filtered_feature_bc_matrix/")
+```
+
+```{r make seurat object}
+# Initialize the Seurat object with the raw (non-normalized data).
+Lv3FBS <- CreateSeuratObject(counts = Lv.3FBS, project = "3FBS", min.cells = 3, min.features = 200)
+Lv3FBS
+#An object of class Seurat 
+#17644 features across 19471 samples within 1 assay 
+#Active assay: RNA (17644 features, 0 variable features)
+```
+
+```{r QC,pre-processing}
+# The [[ operator can add columns to object metadata. This is a great place to stash QC stats
+Lv3FBS[["percent.mt"]] <- PercentageFeatureSet(Lv3FBS, pattern = "^gene-DR311")
+
+# Show QC metrics for the first 5 cells
+head(Lv3FBS@meta.data, 5)
+```
+
+```{r visualize QC metrics}
+# Visualize QC metrics as a violin plot
+VlnPlot(Lv3FBS, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+
+#look more closely at lower expression cells so I dont remove too many cells
+VlnPlot(Lv3FBS, features = c("nFeature_RNA")) + scale_y_continuous(limits = c(400,2000))
+
+#QC scatterplot
+plot1 <- FeatureScatter(Lv3FBS , feature1 = "nCount_RNA", feature2 = "percent.mt")
+plot2 <- FeatureScatter(Lv3FBS , feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+plot1 + plot2
+```
+
+```{r remove outliers}
+#based on violin plot, remove super high and super low expressors
+Lv3FBS <- subset(Lv3FBS, subset = nFeature_RNA > 500 & nFeature_RNA < 4000 & percent.mt < 30)
+
+#re-make violin plot
+VlnPlot(Lv3FBS, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+```
+
+```{r Normalize}
+#LogNormalize: Feature counts for each cell are divided by the total counts for that cell and multiplied by the scale.factor. This is then natural-log transformed using log1p
+Lv3FBS <- NormalizeData(Lv3FBS, normalization.method = "LogNormalize", scale.factor = 10000)
+```
+
+```{r Identify highly variable features}
+#We next calculate a subset of features that exhibit high cell-to-cell variation in the dataset (i.e, they are highly expressed in some cells, and lowly expressed in others). We and others have found that focusing on these genes in downstream analysis helps to highlight biological signal in single-cell datasets.
+
+Lv3FBS <- FindVariableFeatures(Lv3FBS, selection.method = "vst", nfeatures = 2000)
+
+# Identify the 10 most highly variable genes
+top10 <- head(VariableFeatures(Lv3FBS), 10)
+
+# plot variable features with and without labels
+plot1 <- VariableFeaturePlot(Lv3FBS)
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+plot1 + plot2
+```
+
+```{r scaling data}
+#Next, we apply a linear transformation (‘scaling’) that is a standard pre-processing step prior to dimensional reduction techniques like PCA. The ScaleData() function:
+
+#shifts the expression of each gene, so that the mean expression across cells is 0
+#scales the expression of each gene, so that the variance across cells is 1
+#This step gives equal weight in downstream analyses, so that highly-expressed genes do not dominate
+#The results of this are stored in pbmc[["RNA"]]@scale.data
+
+all.genes <- rownames(Lv3FBS)
+Lv3FBS <- ScaleData(Lv3FBS, features = all.genes)
+```
+
+```{r linear dimensional reduction}
+#Next we perform PCA on the scaled data. By default, only the previously determined variable features are used as input, but can be defined using features argument if you wish to choose a different subset
+Lv3FBS <- RunPCA(Lv3FBS, features = VariableFeatures(object = Lv3FBS))
+
+# Examine and visualize PCA results a few different ways
+print(Lv3FBS[["pca"]], dims = 1:5, nfeatures = 5)
+```
+
+```{r }
+#visualize PCA
+VizDimLoadings(Lv3FBS, dims = 1:2, reduction = "pca")
+
+#visualize PCA #2
+DimPlot(Lv3FBS, reduction = "pca")
+
+#visualize heatmap
+DimHeatmap(Lv3FBS, dims = 1:5, cells = 500, balanced = TRUE)
+```
+
+```{r determine dimensionality}
+#An alternative heuristic method generates an ‘Elbow plot’: a ranking of principle components based on the percentage of variance explained by each one (ElbowPlot() function). 
+#I dont see a clear elbow except maybe right before 15 when it started to level off so chose 16 as my PC cutoff
+ElbowPlot(Lv3FBS, ndims = 40)
+
+###The elbow plot is helpful when determining how many PCs we need to capture the majority of the variation in the data. The elbow plot visualizes the standard deviation of each PC. Where the elbow appears is usually the threshold for identifying the majority of the variation. However, this method can be a bit subjective about where the elbow is located. Try a more quantitative approach
+#https://hbctraining.github.io/scRNA-seq/lessons/elbow_plot_metric.html
+
+###1. The point where the principal components only contribute 5% of standard deviation and the principal components cumulatively contribute 90% of the standard deviation.###
+# Determine percent of variation associated with each PC
+pct <- Lv3FBS[["pca"]]@stdev / sum(Lv3FBS[["pca"]]@stdev) * 100
+
+# Calculate cumulative percents for each PC
+cumu <- cumsum(pct)
+
+# Determine which PC exhibits cumulative percent greater than 90% and % variation associated with the PC as less than 5
+co1 <- which(cumu > 90 & pct < 5)[1]
+
+co1
+#The first metric returns PC44 as the PC matching these requirements
+
+###2. The point where the percent change in variation between the consecutive PCs is less than 0.1%.###
+# Determine the difference between variation of PC and subsequent PC
+co2 <- sort(which((pct[1:length(pct) - 1] - pct[2:length(pct)]) > 0.1), decreasing = T)[1] + 1
+
+# last point where change of % of variation is more than 0.1%.
+co2
+#This second metric returns PC9. Usually, we would choose the minimum of these two metrics as the PCs covering the majority of the variation in the data.
+
+# Minimum of the two calculation
+pcs <- min(co1, co2)
+
+pcs
+#Based on these metrics, for the clustering of cells in Seurat we will use the first 9 PCs to generate the clusters.
+
+##We can plot the elbow plot again and overlay the information determined using our metrics:
+# Create a dataframe with values
+plot_df <- data.frame(pct = pct, 
+           cumu = cumu, 
+           rank = 1:length(pct))
+
+# Elbow plot to visualize 
+  ggplot(plot_df, aes(cumu, pct, label = rank, color = rank > pcs)) + 
+  geom_text() + 
+  geom_vline(xintercept = 90, color = "grey") + 
+  geom_hline(yintercept = min(pct[pct > 5]), color = "grey") +
+  theme_bw() +
+  ggsave("quantitativeElbowPlot.svg", width = 10, height = 10)
+```
+
+```{r Cluster the cells}
+#picked 10 based on elbow plot
+Lv3FBS <- FindNeighbors(Lv3FBS, dims = 1:9)
+Lv3FBS <- FindClusters(Lv3FBS, resolution = 0.5)
+
+#Modularity Optimizer version 1.3.0 by Ludo Waltman and Nees Jan van Eck
+#Number of nodes: 19447
+#Number of edges: 494674
+
+#write data to file
+library(data.table)
+data_to_write_out <- as.data.frame(as.matrix(Lv3FBS@assays$RNA@scale.data))
+fwrite(x = data_to_write_out, row.names = TRUE, file = "LV3FBS_scale.data.csv")
+```
+
+
+```{r non-linear dimensional reduction (tSNE)}
+
+Lv3FBSTSNE <- RunTSNE(Lv3FBS, dims = 1:9)
+
+#visualize t-SNE plot
+DimPlot(Lv3FBSTSNE, reduction = "tsne")
+
+#show cluster labels on the plot (over the clusters not just the legend)
+DimPlot(Lv3FBSTSNE, reduction = "tsne", label = TRUE)\
+```
+
+```{r Cell Type Markers}
+###Final Cell Marker Graphs###
+
+#Pigment: homeobox_protein_six1-like, probable_polyketide_synthase_1
+VlnPlot(Lv3FBS, features = c("LOC121418887", "LOC121428528"))
+dev.copy(png, "violinPlot_3FBS_pigmentMarkers.png", width = 900, height = 800)
+dev.off()
+
+dev.copy(svg, "violinPlot_3FBS_pigmentMarkers.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "violinPlot_3FBS_pigmentmMarkers.tiff", width = 900, height = 800)
+dev.off()
+
+FeaturePlot(Lv3FBSTSNE, features = c("LOC121418887", "LOC121428528"))
+dev.copy(png, "featurePlot_3FBS_pigmentMarkers.png", width = 900, height = 800)
+dev.off()
+
+dev.copy(svg, "featurePlot_3FBS_pigmentMarkers.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "featurePlot_3FBS_pigmentmMarkers.tiff", width = 900, height = 800)
+dev.off()
+
+##Stemness Markers##
+#protein_maelstrom_homolog, piwi-like_protein_1, piwi-like_protein_1, eEF1A_lysine_and_N-terminal_methyltransferase-like, protein_nanos-like, probable_ATP-dependent_RNA_helicase_DDX4, probable_ATP-dependent_RNA_helicase_DDX4
+
+VlnPlot(Lv3FBS, features = c("LOC121420310", "LOC121408762", "LOC121431753", "LOC121428667", "LOC121408828", "LOC121423730", "LOC121424246"))
+
+dev.copy(png, "violinPlot_3FBS_stemMarkers.png", width = 900, height = 700)
+dev.off()
+
+dev.copy(svg, "violinPlot_3FBS_stemMarkers.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "violinPlot_3FBS_stemMarkers.tiff", width = 900, height = 800)
+dev.off()
+
+
+FeaturePlot(Lv3FBSTSNE, features = c("LOC121420310", "LOC121408762", "LOC121431753", "LOC121428667", "LOC121408828", "LOC121423730", "LOC121424246"))
+dev.copy(png, "featurePlot_3FBS_stemMarkers.png", width = 900, height = 800)
+dev.off()
+
+dev.copy(svg, "featurePlot_3FBS_stemMarkers.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "featurePlot_3FBS_stemMarkers.tiff", width = 900, height = 800)
+dev.off()
+
+
+##Proliferation Markers##
+#proliferating_cell_nuclear_antigen-like, myc_protein-like, telomerase_reverse_transcriptase-like, telomerase_protein_component_1-like, telomerase_protein_component_1-like, PIN2/TERF1-interacting_telomerase_inhibitor_1-like, PIN2/TERF1-interacting_telomerase_inhibitor_1-like, G2/mitotic-specific_cyclin-A-like, G2/mitotic-specific_cyclin-A-like
+VlnPlot(Lv3FBS, features = c("LOC121431754", "LOC121430677", "LOC121429790", "LOC121412153", "LOC121424081", "LOC121417261", "LOC121417323", "LOC121410426", "LOC121409442"))
+
+dev.copy(png, "violinPlot_3FBS_prolifMarkers_1.png", width = 900, height = 700)
+dev.off()
+
+dev.copy(svg, "violinPlot_3FBS_prolifMarkers_1.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "violinPlot_3FBS_prolifmMarkers_1.tiff", width = 900, height = 800)
+dev.off()
+
+
+FeaturePlot(Lv3FBSTSNE, features = c("LOC121431754", "LOC121430677", "LOC121429790", "LOC121412153", "LOC121424081", "LOC121417261", "LOC121417323", "LOC121410426", "LOC121409442"))
+
+dev.copy(png, "featurePlot_3FBS_prolifMarkers_1.png", width = 900, height = 800)
+dev.off()
+
+dev.copy(svg, "featurePlot_3FBS_prolifMarkers_1.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "featurePlot_3FBS_prolifmMarkers_1.tiff", width = 900, height = 800)
+dev.off()
+
+
+#G2/mitotic-specific_cyclin-B-like, G2/mitotic-specific_cyclin-B3-like, G2/mitotic-specific_cyclin_S13-7-like, G1/S-specific_cyclin-D1-like, G1/S-specific_cyclin-E, G1/S-specific_cyclin-D1-like, cyclin-D-binding_Myb-like_transcription_factor_1, cyclin-D-binding_Myb-like_transcription_factor_1, G1/S-specific_cyclin-E, S_phase_cyclin_A-associated_protein_in_the_endoplasmic_reticulum-like
+VlnPlot(Lv3FBS, features = c("LOC121416277", "LOC121429467", "LOC121419378", "LOC121405827", "LOC121408084", "LOC121410996", "LOC121413797", "LOC121408084", "LOC121415132"))
+
+dev.copy(png, "violinPlot_3FBS_prolifMarkers_2.png", width = 900, height = 900)
+dev.off()
+
+dev.copy(svg, "violinPlot_3FBS_prolifMarkers_2.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "violinPlot_3FBS_prolifmMarkers_2.tiff", width = 900, height = 800)
+dev.off()
+
+FeaturePlot(Lv3FBSTSNE, features = c("LOC121416277", "LOC121429467", "LOC121419378", "LOC121405827", "LOC121408084", "LOC121410996", "LOC121413797", "LOC121408084", "LOC121415132"))
+
+dev.copy(png, "featurePlot_3FBS_prolifMarkers_2.png", width = 900, height = 900)
+dev.off()
+
+dev.copy(svg, "featurePlot_3FBS_prolifMarkers_2.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "featurePlot_3FBS_prolifmMarkers_2.tiff", width = 900, height = 800)
+dev.off()
+
+
+##Neuronal Markers##
+#notch, synaptotagmin-1-like, synaptotagmin-1-like, synaptotagmin-6-like, synaptotagmin-12-like, synaptotagmin-14-like, neurofilament_heavy_polypeptide-like, neurofilament_heavy_polypeptide-like, neurofilament_heavy_polypeptide-like, neurofilament_heavy_polypeptide-like
+
+VlnPlot(Lv3FBS, features = c("LOC447795", "LOC121410540", "LOC121405894", "LOC121405860", "LOC121406212", "LOC121418961", "LOC121414907", "LOC121424392", "LOC121424392", "LOC121424392"))
+
+dev.copy(png, "violinPlot_3FBS_neuronalMarkers_1.png", width = 900, height = 900)
+dev.off()
+
+dev.copy(svg, "violinPlot_3FBS_neuronalMarkers_1.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "violinPlot_3FBS_neuronalMarkers_1.tiff", width = 900, height = 800)
+dev.off()
+
+
+FeaturePlot(Lv3FBSTSNE, features = c("LOC447795", "LOC121410540", "LOC121405894", "LOC121405860", "LOC121406212", "LOC121418961", "LOC121414907", "LOC121424392", "LOC121424392", "LOC121424392"))
+
+dev.copy(png, "featurePlot_3FBS_neuronalMarkers_1.png", width = 900, height = 800)
+dev.off()
+
+dev.copy(svg, "featurePlot_3FBS_neuronalMarkers_1.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "featurePlot_3FBS_neuronalMarkers_1.tiff", width = 900, height = 800)
+dev.off()
+
+#neurofilament_heavy_polypeptide-like, neurofilament_heavy_polypeptide-like, neurofilament_medium_polypeptide-like, metabotropic_glutamate_receptor_3-like, hyalin, hyalin-like, hyalin-like, hyalin-like, neuronal_acetylcholine_receptor_subunit_alpha-3-like, neural_proliferation_differentiation_and_control_protein_1-like
+
+VlnPlot(Lv3FBS, features = c("LOC121424392", "LOC121432068", "LOC121425197", "LOC121429617", "LOC446193", "LOC121419137", "LOC121421150", "LOC121425550", "LOC121429806", "LOC121429231"))
+
+dev.copy(png, "violinPlot_3FBS_neuronalMarkers_2.png", width = 900, height = 900)
+dev.off()
+
+dev.copy(svg, "violinPlot_3FBS_neuronalMarkers_2.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "violinPlot_3FBS_neuronalmarkers_2.tiff", width = 900, height = 800)
+dev.off()
+
+
+FeaturePlot(Lv3FBSTSNE, features = c("LOC121424392", "LOC121432068", "LOC121425197", "LOC121429617", "LOC446193", "LOC121419137", "LOC121421150", "LOC121425550", "LOC121429806", "LOC121429231"))
+
+dev.copy(png, "featurePlot_3FBS_neuronalMarkers_2.png", width = 900, height = 800)
+dev.off()
+
+dev.copy(svg, "featurePlot_3FBS_neuronalMarkers_2.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "featurePlot_3FBS_neuronalmarkers_2.tiff", width = 900, height = 800)
+dev.off()
+
+##ectoderm markers##
+#transcription_factor_HES-1-like, transcription_factor_HES-1-A-like, transcription_factor_HES-4-like, chordin-like
+
+VlnPlot(Lv3FBS, features = c("LOC121427522", "LOC121427235", "LOC121427575", "LOC121427607"))
+dev.copy(png, "violinPlot_3FBS_ectodermlMarkers.png", width = 900, height = 900)
+dev.off()
+
+dev.copy(svg, "violinPlot_3FBS_ectodermMarkers.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "violinPlot_3FBS_ectodermMarkers.tiff", width = 900, height = 800)
+dev.off()
+
+FeaturePlot(Lv3FBSTSNE, features = c("LOC121427522", "LOC121427235", "LOC121427575", "LOC121427607"))
+dev.copy(png, "featurePlot_3FBS_ectodermlMarkers.png", width = 900, height = 900)
+dev.off()
+
+dev.copy(svg, "featurePlot_3FBS_ectodermMarkers.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "featurePlot_3FBS_ectodermMarkers.tiff", width = 900, height = 800)
+dev.off()
+
+##Skeleton Markers##
+#mesenchyme-specific_cell_surface_glycoprotein-like, mesenchyme-specific_cell_surface_glycoprotein-like, mesenchyme-specific_cell_surface_glycoprotein-like, 34_kDa_spicule_matrix_protein, 41_kDa_spicule_matrix_protein-like, 30_kDa_spicule_matrix_protein_alpha-like
+VlnPlot(Lv3FBS, features = c("LOC121428121", "LOC121428213", "LOC121427215", "LOC121405815", "LOC121405817", "LOC121406020"))
+
+dev.copy(png, "violinPlot_3FBS_skeletonMarkers_1.png", width = 900, height = 900)
+dev.off()
+
+dev.copy(svg, "violinPlot_3FBS_skeletonMarkers_1.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "violinPlot_3FBS_skeletonMarkers_1.tiff", width = 900, height = 800)
+dev.off()
+
+
+FeaturePlot(Lv3FBSTSNE, features = c("LOC121428121", "LOC121428213", "LOC121427215", "LOC121405815", "LOC121405817", "LOC121406020"))
+
+dev.copy(png, "featurePlot_3FBS_skeletonMarkers_1.png", width = 900, height = 900)
+dev.off()
+
+dev.copy(svg, "featurePlot_3FBS_skeletonMarkers_1.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "featurePlot_3FBS_skeletonMarkers_1.tiff", width = 900, height = 800)
+dev.off()
+
+#34_kDa_spicule_matrix_protein-like, 27_kDa_primary_mesenchyme-specific_spicule_protein-like, carbonic_anhydrase_1-like, carbonic_anhydrase-related_protein_10-like, beta_carbonic_anhydrase_1-like, carbonic_anhydrase_14-like
+VlnPlot(Lv3FBS, features = c("LOC121406031", "LOC121406034", "LOC121406846", "LOC121429170", "LOC121429566", "LOC121430996"))
+
+dev.copy(png, "violinPlot_3FBS_skeletonMarkers_2.png", width = 900, height = 900)
+dev.off()
+
+dev.copy(svg, "violinPlot_3FBS_skeletonMarkers_2.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "violinPlot_3FBS_skeletonMarkers_2.tiff", width = 900, height = 800)
+dev.off()
+
+
+FeaturePlot(Lv3FBSTSNE, features = c("LOC121406031", "LOC121406034", "LOC121406846", "LOC121429170", "LOC121429566", "LOC121430996"))
+
+dev.copy(png, "featurePlot_3FBS_skeletonMarkers_2.png", width = 900, height = 800)
+dev.off()
+
+dev.copy(svg, "featurePlot_3FBS_skeletonMarkers_2.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "featurePlot_3FBS_skeletonMarkers_2.tiff", width = 900, height = 800)
+dev.off()
+
+##Muscle Markers##
+#myosin_heavy_chain,_striated_muscle-like, myosin_light_chain_kinase,_smooth_muscle-like, myosin_light_chain_kinase,_smooth_muscle-like, broad_substrate_specificity_ATP-binding_cassette_transporter_ABCG2-like, myoblast_determination_protein_1_homolog
+
+VlnPlot(Lv3FBS, features = c("LOC121408547", "LOC121424934", "LOC121425215", "LOC121431580", "LOC121405674"))
+dev.copy(png, "violinPlot_3FBS_muscleMarkers.png", width = 900, height = 900)
+dev.off()
+
+dev.copy(svg, "violinPlot_3FBS_musclenMarkers.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "violinPlot_3FBS_muscleMarkers.tiff", width = 900, height = 800)
+dev.off()
+
+
+FeaturePlot(Lv3FBSTSNE, features = c("LOC121408547", "LOC121424934", "LOC121425215", "LOC121431580", "LOC121405674"))
+dev.copy(png, "featurePlot_3FBS_muscleMarkers.png", width = 900, height = 800)
+dev.off()
+
+dev.copy(svg, "featurePlot_3FBS_musclenMarkers.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "featurePlot_3FBS_muscleMarkers.tiff", width = 900, height = 800)
+dev.off()
+
+##Cilia Markers ##
+#tektin-1-like, tektin-4-like, tektin-3-like, tektin-B1-like
+
+VlnPlot(Lv3FBS, features = c("LOC121408954", "LOC121423108", "LOC121423323", "LOC121430708"))
+
+dev.copy(png, "violinPlot_3FBS_ciliaMarkers.png", width = 900, height = 900)
+dev.off()
+
+dev.copy(svg, "violinPlot_3FBS_ciliaMarkers.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "violinPlot_3FBS_ciliaMarkers.tiff", width = 900, height = 800)
+dev.off()
+
+
+FeaturePlot(Lv3FBSTSNE, features = c("LOC121408954", "LOC121423108", "LOC121423323", "LOC121430708"))
+
+dev.copy(png, "featurePlot_3FBS_ciliaMarkers.png", width = 900, height = 900)
+dev.off()
+
+dev.copy(svg, "featurePlot_3FBS_ciliaMarkers.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "featurePlot_3FBS_ciliaMarkers.tiff", width = 900, height = 800)
+dev.off()
+
+##endoderm##
+
+VlnPlot(Lv3FBS, features = c("LOC121406173", "LOC121428657", "LOC121419318"))
+dev.copy(png, "violinPlot_3FBS_endodermMarkers.png", width = 900, height = 800)
+dev.off()
+
+dev.copy(svg, "violinPlot_3FBS_endodermMarkers.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "violinPlot_3FBS_endodermMarkers.tiff", width = 900, height = 800)
+dev.off()
+
+
+FeaturePlot(Lv3FBSTSNE, features = c("LOC121406173", "LOC121428657", "LOC121419318"))
+
+dev.copy(png, "featurePlot_3FBS_endodermMarkers.png", width = 900, height = 800)
+dev.off()
+
+dev.copy(svg, "featurePlot_3FBS_endodermMarkers.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "featurePlot_3FBS_endodermMarkers.tiff", width = 900, height = 800)
+dev.off()
+
+
+
+##Receptors##
+
+#EGF
+VlnPlot(Lv3FBS, features = c("LOC121405695", "LOC121421295", "LOC121429013"))
+
+dev.copy(png, "violinPlot_3FBS_EGF.png", width = 900, height = 900)
+dev.off()
+
+dev.copy(svg, "violinPlot_3FBS_EGF.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "violinPlot_3FBS_EGF.tiff", width = 900, height = 800)
+dev.off()
+
+
+FeaturePlot(Lv3FBSTSNE, features = c("LOC121405695", "LOC121421295", "LOC121429013"))
+
+dev.copy(png, "featurePlot_3FBS_EGF.png", width = 900, height = 900)
+dev.off()
+
+dev.copy(svg, "featurePlot_3FBS_EGF.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "featurePlot_3FBS_EGF.tiff", width = 900, height = 800)
+dev.off()
+
+#FGF
+VlnPlot(Lv3FBS, features = c("LOC121415946", "LOC121419550", "LOC121425416", "LOC121425598", "LOC121425661", "LOC121429921", "LOC121431286"))
+
+dev.copy(png, "violinPlot_3FBS_FGF.png", width = 900, height = 900)
+dev.off()
+
+dev.copy(svg, "violinPlot_3FBS_FGF.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "violinPlot_3FBS_FGF.tiff", width = 900, height = 800)
+dev.off()
+
+
+FeaturePlot(Lv3FBSTSNE, features = c("LOC121415946", "LOC121419550", "LOC121425416", "LOC121425598", "LOC121425661", "LOC121429921", "LOC121431286"))
+
+dev.copy(png, "featurePlot_3FBS_FGF.png", width = 900, height = 900)
+dev.off()
+
+dev.copy(svg, "featurePlot_3FBS_FGF.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "featurePlot_3FBS_FGF.tiff", width = 900, height = 800)
+dev.off()
+
+#hepatocyte
+#all hepatocyte annotations
+VlnPlot(Lv3FBS, features = c("LOC121407560", "LOC121407763", "LOC121408778", "LOC121410774", "LOC121419318", "LOC121422516", "LOC121426646", "LOC121428657"))
+
+#hepatocyte receptors
+VlnPlot(Lv3FBS, features = c("LOC121410774", "LOC121422516", "LOC121426646"))
+dev.copy(png, "violinPlot_3FBS_hepatocyte.png", width = 900, height = 700)
+dev.off()
+
+dev.copy(svg, "violinPlot_3FBS_hepatocyt.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "violinPlot_3FBS_hepatocyt.tiff", width = 900, height = 800)
+dev.off()
+
+
+FeaturePlot(Lv3FBSTSNE, features = c("LOC121410774", "LOC121422516", "LOC121426646"))
+dev.copy(png, "featurePlot_3FBS_hepatocyte.png", width = 900, height = 700)
+dev.off()
+
+dev.copy(svg, "featurePlot_3FBS_hepatocyt.svg", width = 10, height = 10)
+dev.off()
+
+dev.copy(tiff, "featurePlot_3FBS_hepatocyt.tiff", width = 900, height = 800)
+dev.off()
+
+
+####February 2024####
+
+```{r}
+##2023 October
+##This was done for the tSNE plot##
+
+#Get the number of cells in each cluster
+library(data.table)
+library(magrittr)
+library(dplyr)
+
+#get the meta data and put it in a table
+md <- Lv3FBSTSNE@meta.data %>% as.data.table
+head(md)
+
+#get the total number of cells in each cluster
+table(Lv3FBSTSNE$seurat_clusters)
+```
+
+```{r}
+#2024 Feb
+#look at marker genes in the tSNE plot
+setwd("C:/Users/kate.castellano/OneDrive - Gloucester Marine Genomics Institute/Documents/KCastellano/SeaUrchin/SeaUrchin_Data/10x_seaurchin/Seurat_3FBS/2024Feb_tSNE")
+
+library(ggplot2)
+
+#cell cycle markers
+FeaturePlot(object = Lv3FBSTSNE, features = c("LOC121405827")) +
+  ggtitle("CyclinD")
+dev.copy(svg, "3FBSfeaturePlot_prolifMarker_CyclinD_2023Oct.svg", width = 10, height = 10)
+dev.off()
+dev.copy(png, "3FBSfeaturePlot_prolifMarkers_CyclinD_2023Oct.png")
+dev.off()
+
+#get counts for specific gene in each cluster (plus a violin plot)
+p <- VlnPlot(object = Lv3FBSTSNE, features =c("LOC121405827")) +
+  ggtitle("CyclinD")
+ggsave("3FBSvlnPlot_prolifMarker_CyclinD_2023Oct.svg", width = 10, height = 10)
+ggsave("3FBSvlnPlot_prolifMarker_CyclinD_2023Oct.png")
+d <- p$data %>% group_by(ident) %>% summarize(counts = sum(LOC121405827, na.rm = TRUE))
+write.csv(d, "clustCellCount_prolifMarkers_CyclinD_2023Oct.csv", row.names=FALSE)
+
+#cell cycle markers
+FeaturePlot(object = Lv3FBSTSNE, features = c("LOC121409442")) +
+  ggtitle("CyclinA-G2")
+dev.copy(svg, "3FBSfeaturePlot_prolifMarker_CyclinA-G2_2023Oct.svg", width = 10, height = 10)
+dev.off()
+dev.copy(png, "3FBSfeaturePlot_prolifMarkers_CyclinA-G2_2023Oct.png")
+dev.off()
+#get counts for specific gene in each cluster (plus a violin plot)
+p <- VlnPlot(object = Lv3FBSTSNE, features =c("LOC121409442")) +
+  ggtitle("CyclinA")
+ggsave("3FBSvlnPlot_prolifMarkers_CyclinA-G2_2023Oct.png")
+ggsave("3FBSfeaturePlot_prolifMarkers_CyclinA-G2_2023Oct.png")
+d <- p$data %>% group_by(ident) %>% summarize(counts = sum(LOC121409442, na.rm = TRUE))
+write.csv(d, "clustCellCount_prolifMarkers_CyclinA-G2_2023Oct.csv", row.names=FALSE)
+
+#cell cycle markers
+FeaturePlot(object = Lv3FBSTSNE, features = c("LOC121416277")) +
+  ggtitle("CyclinB")
+dev.copy(svg, "3FBSfeaturePlo_prolifMarker_CyclinB_2023Oct.svg", width = 10, height = 10)
+dev.off()
+dev.copy(png, "3FBSfeaturePlot_prolifMarkers_CyclinB_2023Oct.png")
+dev.off()
+#get counts for specific gene in each cluster (plus a violin plot)
+p <- VlnPlot(object = Lv3FBSTSNE, features =c("LOC121416277")) +
+  ggtitle("CyclinB")
+ggsave("3FBSvlnPlot_prolifMarkers_CyclinB_2023Oct.png")
+ggsave("3FBSfeaturePlot_prolifMarkers_CyclinB_2023Oct.png")
+d <- p$data %>% group_by(ident) %>% summarize(counts = sum(LOC121416277, na.rm = TRUE))
+write.csv(d, "clustCellCount_prolifMarkers_CyclinB_2023Oct.csv", row.names=FALSE)
+
+#cell cycle markers
+FeaturePlot(object = Lv3FBSTSNE, features = c("LOC121408084")) +
+  ggtitle("CyclinE")
+dev.copy(svg, "3FBSfeaturePlot_prolifMarker_CyclinE_2023Oct.svg", width = 10, height = 10)
+dev.off()
+dev.copy(png, "3FBSfeaturePlot_prolifMarkers_CyclinE_2023Oct.png")
+dev.off()
+#get counts for specific gene in each cluster (plus a violin plot)
+p <- VlnPlot(object = Lv3FBSTSNE, features =c("LOC121408084")) +
+  ggtitle("CyclinE")
+ggsave("3FBSvlnPlot_prolifMarkers_CyclinE_2023Oct.png")
+ggsave("3FBSfeaturePlot_prolifMarkers_CyclinE_2023Oct.png")
+d <- p$data %>% group_by(ident) %>% summarize(counts = sum(LOC121408084, na.rm = TRUE))
+write.csv(d, "clustCellCount_prolifMarkers_CyclinE_2023Oct.csv", row.names=FALSE)
+
+#cell cycle markers
+FeaturePlot(object = Lv3FBSTSNE, features = c("LOC121415132")) +
+  ggtitle("CyclinA-S phase")
+dev.copy(svg, "3FBSfeaturePlott_prolifMarker_CyclinA-Sphase_2023Oct.svg", width = 10, height = 10)
+dev.off()
+dev.copy(png, "3FBSfeaturePlott_prolifMarkers_CyclinA-Sphase_2023Oct.png")
+dev.off()
+#get counts for specific gene in each cluster (plus a violin plot)
+p <- VlnPlot(object = Lv3FBSTSNE, features =c("LOC121415132")) +
+  ggtitle("CyclinA-S phase")
+ggsave("3FBSvlnPlot_prolifMarkers_CyclinA-Sphase_2023Oct.png")
+ggsave("3FBSfeaturePlott_prolifMarkers_CyclinA-Sphase_2023Oct.png")
+d <- p$data %>% group_by(ident) %>% summarize(counts = sum(LOC121415132, na.rm = TRUE))
+write.csv(d, "clustCellCount_prolifMarkers_CyclinA-Sphase_2023Oct.csv", row.names=FALSE)
+```
+
+```{r}
+#2024 Feb
+#look at marker genes in the tSNE plot for Ectoderm Markers
+setwd("C:/Users/kate.castellano/OneDrive - Gloucester Marine Genomics Institute/Documents/KCastellano/SeaUrchin/SeaUrchin_Data/10x_seaurchin/Seurat_3FBS/2024Feb_tSNE")
+
+FeaturePlot(object = Lv3FBSTSNE, features = c("LOC121427607")) +
+  ggtitle("Chordin")
+dev.copy(svg, "3FBSfeaturePlot_ectoderm_chordin_2023Oct.svg", width = 10, height = 10)
+dev.off()
+dev.copy(png, "3FBSfeaturePlot_ectoderm_chordin_2023Oct.png")
+dev.off()
+#get counts for specific gene in each cluster (plus a violin plot)
+p <- VlnPlot(object = Lv3FBSTSNE, features =c("LOC121427607")) +
+  ggtitle("Chordin")
+ggsave("3FBSvlnPlot_ectoderm_chordin_2023Oct.svg", width = 10, height = 10)
+ggsave("3FBSvlnPlot_ectoderm_chordin_2023Oct.png")
+d <- p$data %>% group_by(ident) %>% summarize(counts = sum(LOC121427607, na.rm = TRUE))
+write.csv(d, "3FBSclustCellCount_ectoderm_chordin_2023Oct.csv", row.names=FALSE)
+
+FeaturePlot(object = Lv3FBSTSNE, features = c("LOC121428737")) +
+  ggtitle("GSC-like")
+dev.copy(svg, "3FBSfeaturePlot_ectoderm_GSC-like_2023Oct.svg", width = 10, height = 10)
+dev.off()
+dev.copy(png, "3FBSfeaturePlot_ectoderm_GSC-like_2023Oct.png")
+dev.off()
+#get counts for specific gene in each cluster (plus a violin plot)
+p <- VlnPlot(object = Lv3FBSTSNE, features =c("LOC121428737")) +
+  ggtitle("GSC-like")
+ggsave("3FBSvlnPlot_ectoderm_GSC-like_2023Oct.svg", width = 10, height = 10)
+ggsave("3FBSvlnPlot_ectoderm_GSC-like_2023Oct.png")
+d <- p$data %>% group_by(ident) %>% summarize(counts = sum(LOC121428737, na.rm = TRUE))
+write.csv(d, "3FBSclustCellCount_ectoderm_GSC-like_2023Oct.csv", row.names=FALSE)
+#Warning: The following requested variables were not found: LOC121428737Error: None of the requested features were found: LOC121428737 in slot data
+
+FeaturePlot(object = Lv3FBSTSNE, features = c("LOC446163")) +
+  ggtitle("GSC")
+dev.copy(svg, "3FBSfeaturePlot_ectoderm_GSC_2023Oct.svg", width = 10, height = 10)
+dev.off()
+dev.copy(png, "3FBSfeaturePlot_ectoderm_GSC_2023Oct.png")
+dev.off()
+#get counts for specific gene in each cluster (plus a violin plot)
+p <- VlnPlot(object = Lv3FBSTSNE, features =c("LOC446163")) +
+  ggtitle("GSC")
+ggsave("3FBSvlnPlot_ectoderm_GSC_2023Oct.svg", width = 10, height = 10)
+ggsave("3FBSvlnPlot_ectoderm_GSC_2023Oct.png")
+d <- p$data %>% group_by(ident) %>% summarize(counts = sum(LOC446163, na.rm = TRUE))
+write.csv(d, "3FBSclustCellCount_ectoderm_GSC_2023Oct.csv", row.names=FALSE)
+#Warning: The following requested variables were not found: LOC446163Error: None of the requested features were found: LOC446163 in slot data
+
+FeaturePlot(object = Lv3FBSTSNE, features = c("LOC121410373")) +
+  ggtitle("Spec2a")
+dev.copy(svg, "3FBSfeaturePlot_ectoderm_Spec2a_2023Oct.svg", width = 10, height = 10)
+dev.off()
+dev.copy(png, "3FBSfeaturePlot_ectoderm_Spec2a_2023Oct.png")
+dev.off()
+#get counts for specific gene in each cluster (plus a violin plot)
+p <- VlnPlot(object = Lv3FBSTSNE, features =c("LOC121410373")) +
+  ggtitle("Spec2a")
+ggsave("3FBSvlnPlot_ectoderm_Spec2a_2023Oct.svg", width = 10, height = 10)
+ggsave("3FBSvlnPlot_ectoderm_Spec2a_2023Oct.png")
+d <- p$data %>% group_by(ident) %>% summarize(counts = sum(LOC121410373, na.rm = TRUE))
+write.csv(d, "3FBSclustCellCount_Spec2a_2023Oct.csv", row.names=FALSE)
+
+FeaturePlot(object = Lv3FBSTSNE, features = c("LOC121427522")) +
+  ggtitle("Hes1")
+dev.copy(svg, "3FBSfeaturePlot_ectoderm_Hes1_2023Oct.svg", width = 10, height = 10)
+dev.off()
+dev.copy(png, "3FBSfeaturePlot_ectoderm_Hes1_2023Oct.png")
+dev.off()
+#get counts for specific gene in each cluster (plus a violin plot)
+p <- VlnPlot(object = Lv3FBSTSNE, features =c("LOC121427522")) +
+  ggtitle("Hes1")
+ggsave("3FBSvlnPlot_ectoderm_Hes1_2023Oct.svg", width = 10, height = 10)
+ggsave("3FBSvlnPlot_ectoderm_Hes1_2023Oct.png")
+d <- p$data %>% group_by(ident) %>% summarize(counts = sum(LOC121427522, na.rm = TRUE))
+write.csv(d, "3FBSclustCellCount_Hes1_2023Oct.csv", row.names=FALSE)
+
+FeaturePlot(object = Lv3FBSTSNE, features = c("LOC121427235")) +
+  ggtitle("Hes1A")
+dev.copy(svg, "3FBSfeaturePlot_ectoderm_Hes1A_2023Oct.svg", width = 10, height = 10)
+dev.off()
+dev.copy(png, "3FBSfeaturePlot_ectoderm_Hes1A_2023Oct.png")
+dev.off()
+#get counts for specific gene in each cluster (plus a violin plot)
+p <- VlnPlot(object = Lv3FBSTSNE, features =c("LOC121427235")) +
+  ggtitle("Hes1A")
+ggsave("3FBSvlnPlot_ectoderm_Hes1A_2023Oct.svg", width = 10, height = 10)
+ggsave("3FBSvlnPlot_ectoderm_Hes1A_2023Oct.png")
+d <- p$data %>% group_by(ident) %>% summarize(counts = sum(LOC121427235, na.rm = TRUE))
+write.csv(d, "3FBSclustCellCount_Hes1A_2023Oct.csv", row.names=FALSE)
+
+FeaturePlot(object = Lv3FBSTSNE, features = c("LOC121427575")) +
+  ggtitle("Hes4")
+dev.copy(svg, "3FBSfeaturePlot_ectoderm_Hes4_2023Oct.svg", width = 10, height = 10)
+dev.off()
+dev.copy(png, "3FBSfeaturePlot_ectoderm_Hes4_2023Oct.png")
+dev.off()
+#get counts for specific gene in each cluster (plus a violin plot)
+p <- VlnPlot(object = Lv3FBSTSNE, features =c("LOC121427575")) +
+  ggtitle("Hes4")
+ggsave("3FBSvlnPlot_ectoderm_Hes4_2023Oct.svg", width = 10, height = 10)
+ggsave("3FBSvlnPlot_ectoderm_Hes4_2023Oct.png")
+d <- p$data %>% group_by(ident) %>% summarize(counts = sum(LOC121427575, na.rm = TRUE))
+write.csv(d, "3FBSclustCellCount_Hes4_2023Oct.csv", row.names=FALSE)
+
+```
+```{r}
+
+#2023 October
+#look at marker genes in the tSNE plot for Endoderm Markers
+setwd("C:/Users/kate.castellano/OneDrive - Gloucester Marine Genomics Institute/Documents/KCastellano/SeaUrchin/SeaUrchin_Data/10x_seaurchin/Seurat_3FBS/2024Feb_tSNE")
+
+var_list <- list(genes = c("LOC121406173", "LOC121428657", "LOC121419318"),
+                 name = c("Endo16", "HNF3_alphaFOXA1", "HNF3 betaFOXA2"))
+
+
+for (genes in var_list$genes) {
+  for (name in var_list$name) {
+    p <- FeaturePlot(object = Lv3FBSTSNE , features = c(genes)) +
+      ggtitle(name) #create and save feature plot for each gene
+    ggsave(p, filename=paste("featurePlot_",name,"2023Oct.svg",sep=""))
+    ggsave(p, filename=paste("featurePlot_",name,"2023Oct.png",sep=""))
+    
+  }
+}
+getwd()
+
+#get counts for specific gene in each cluster (plus a violin plot)
+p <- VlnPlot(object = Lv3FBSTSNE, features =c("LOC121406173")) +
+  ggtitle("Endo16")
+ggsave("3FBSvlnPlot_endoderm_Endo16_2023Oct.svg", width = 10, height = 10)
+ggsave("3FBSvlnPlot_endoderm_Endo16_2023Oct.png")
+d <- p$data %>% group_by(ident) %>% summarize(counts = sum(LOC121406173, na.rm = TRUE))
+write.csv(d, "3FBSclustCellCount_Endo16_2023Oct.csv", row.names=FALSE)
+
+p <- VlnPlot(object = Lv3FBSTSNE, features =c("LOC121428657")) +
+  ggtitle("HNF3_alphaFOXA1")
+ggsave("3FBSvlnPlot_endoderm_HNF3_alphaFOXA1_2023Oct.svg", width = 10, height = 10)
+ggsave("3FBSvlnPlot_endoderm_HNF3_alphaFOXA1_2023Oct.png")
+d <- p$data %>% group_by(ident) %>% summarize(counts = sum(LOC121428657, na.rm = TRUE))
+write.csv(d, "3FBSclustCellCount_HNF3_alphaFOXA1_2023Oct.csv", row.names=FALSE)
+
+p <- VlnPlot(object = Lv3FBSTSNE, features =c("LOC121419318")) +
+  ggtitle("HNF3 betaFOXA2")
+ggsave("3FBSvlnPlot_endoderm_HNF3betaFOXA2_2023Oct.svg", width = 10, height = 10)
+ggsave("3FBSvlnPlot_endoderm_HNF3betaFOXA2_2023Oct.png")
+d <- p$data %>% group_by(ident) %>% summarize(counts = sum(LOC121419318, na.rm = TRUE))
+write.csv(d, "3FBSclustCellCount_HNF3betaFOXA2_2023Oct.csv", row.names=FALSE)
+
+```
+
+```{r }
+#for each gene in each cluster get the number of cells expressing each gene
+AverageExpression(Lv3FBSTSNE, features= genes, group.by="ident", slot = "counts" )
+```
+
+```{r Function to calculate percentage of cells expressing marker genes}
+# updated 1/31/2020 to accommodate V3.1
+# updated 2/4/2020 to output "NA" for genes not detected in certain subgroups
+#https://github.com/satijalab/seurat/issues/371
+
+PrctCellExpringGene <- function(object, genes, group.by = "all"){
+    if(group.by == "all"){
+        prct = unlist(lapply(genes,calc_helper, object=object))
+        result = data.frame(Markers = genes, Cell_proportion = prct)
+        return(result)
+    }
+
+    else{        
+        list = SplitObject(object, group.by)
+        factors = names(list)
+
+        results = lapply(list, PrctCellExpringGene, genes=genes)
+        for(i in 1:length(factors)){
+        results[[i]]$Feature = factors[i]
+        }
+        combined = do.call("rbind", results)
+        return(combined)
+    }
+}
+
+calc_helper <- function(object,genes){
+    counts = object[['RNA']]@counts
+    ncells = ncol(counts)
+    if(genes %in% row.names(counts)){
+    sum(counts[genes,]>0)/ncells*100
+    }else{return(NA)}
+}
+
+```
+
+```{r calculate percentage of cells expressing marker genes}
+#calculate the percentage of cells in ech cluster expressing certain genes (need function above)
+
+#proliferation markers
+d <- PrctCellExpringGene(Lv3FBSTSNE ,genes =c("LOC121409442","LOC121416277","LOC121405827","LOC121408084","LOC121415132"), group.by = "seurat_clusters")
+write.csv(d, "3FBSPercCells_ProlifMarkers_2023Oct.csv", row.names=FALSE)
+
+d2 <- PrctCellExpringGene(Lv3FBSTSNE ,genes =c("LOC121410761", "LOC447791", "LOC121409919", "LOC121426230", "LOC121431754", "LOC121430677", "LOC121429790"), group.by = "seurat_clusters")
+write.csv(d2, "3FBSPercCells_ProlifMarkers2_2023Oct.csv", row.names=FALSE)
+
+#ectoderm
+d <- PrctCellExpringGene(Lv3FBSTSNE ,genes =c("LOC121427522", "LOC121427235", "LOC121427575", "LOC121427607", "LOC121420667", "LOC446163", "LOC121410373", "LOC446159", "LOC121430393", "LOC447795", "LOC121405894", "LOC121418961", "LOC121424392", "LOC121425197", "LOC121429617", "LOC446193", "LOC121429806", "LOC121429231"), group.by = "seurat_clusters")
+write.csv(d, "3FBSPercCells_ectodermMarkers_2023Oct.csv", row.names=FALSE)
+
+#endoderm
+d <- PrctCellExpringGene(Lv3FBSTSNE ,genes =c("LOC121406173", "LOC121428657", "LOC121419318"), group.by = "seurat_clusters")
+write.csv(d, "3FBSPercCells_endodermMarkers_2023Oct.csv", row.names=FALSE)
+
+#mesoderm
+d <- PrctCellExpringGene(Lv3FBSTSNE ,genes =c("LOC121408547", "LOC121424934", "LOC121425215", "LOC121406031", "LOC121406034", "LOC121406020", "LOC121406031", "LOC121428121"), group.by = "seurat_clusters")
+write.csv(d, "3FBSPercCells_mesodermMarkers_2023Oct.csv", row.names=FALSE)
+
+#germ cell
+d <- PrctCellExpringGene(Lv3FBSTSNE ,genes =c("LOC121408828", "LOC121408762", "LOC121431753", "LOC121424246", "LOC121420310"), group.by = "seurat_clusters")
+write.csv(d, "3FBSPercCells_germcellMarkers_2023Oct.csv", row.names=FALSE)
+
+#pigment
+d <- PrctCellExpringGene(Lv3FBSTSNE ,genes =c("LOC121428528" ,"LOC121418887"), group.by = "seurat_clusters")
+write.csv(d, "3FBSPercCells_pigmentMarkers_2023Oct.csv", row.names=FALSE)
+
+#cillia
+d <- PrctCellExpringGene(Lv3FBSTSNE ,genes =c("LOC121408954" ,"LOC121423108" ,"LOC121423323" ,"LOC121430708"), group.by = "seurat_clusters")
+write.csv(d, "3FBSPercCells_cilliaMarkers_2023Oct.csv", row.names=FALSE)
+
+#DNA polymerase genes
+d <- PrctCellExpringGene(Lv3FBSTSNE ,genes =c("LOC121429881", "LOC121408448", "LOC121428701"), group.by = "seurat_clusters")
+write.csv(d, "3FBSPercCells_dnapolyMarkers_2023Oct.csv", row.names=FALSE)
+```
+
+```{r Get all expressed genes in each cluster}
+#Seurat can help you find markers that define clusters via differential expression (DE). By default, it identifies positive and negative markers of a single cluster (specified in ident.1), compared to all other cells. FindAllMarkers() automates this process for all clusters, but you can also test groups of clusters vs. each other, or against all cells.
+# find all markers of cluster 0
+cluster0.markers <- FindMarkers(Lv3FBSTSNE, ident.1 = 0)
+write.csv(cluster0.markers, "3FBS_cluster0_DEallGenes_2024March.csv")
+
+cluster1.markers <- FindMarkers(Lv3FBSTSNE, ident.1 = 1)
+write.csv(cluster1.markers, "3FBS_cluster1_DEallGenes_2024March.csv")
+
+cluster2.markers <- FindMarkers(Lv3FBSTSNE, ident.1 = 2)
+write.csv(cluster2.markers, "3FBS_cluster2_DEallGenes_2024March.csv")
+
+cluster3.markers <- FindMarkers(Lv3FBSTSNE, ident.1 = 3)
+write.csv(cluster3.markers, "3FBS_cluster3_DEallGenes_2024March.csv")
+
+cluster4.markers <- FindMarkers(Lv3FBSTSNE, ident.1 = 4)
+write.csv(cluster4.markers, "3FBS_cluster4_DEallGenes_2024March.csv")
+
+cluster5.markers <- FindMarkers(Lv3FBSTSNE, ident.1 = 5)
+write.csv(cluster5.markers, "3FBS_cluster5_DEallGenes_2024March.csv")
+
+cluster6.markers <- FindMarkers(Lv3FBSTSNE, ident.1 = 6)
+write.csv(cluster6.markers, "3FBS_cluster6_DEallGenes_2024March.csv")
+
+cluster7.markers <- FindMarkers(Lv3FBSTSNE, ident.1 = 7)
+write.csv(cluster7.markers, "3FBS_cluster7_DEallGenes_2024March.csv")
+
+```
+
+```{r }
+# This loop just runs the FindMarkers function on all of the clusters
+lapply(
+  levels(Lv3FBSTSNE[["seurat_clusters"]][[1]]),
+  function(x)FindMarkers(Lv3FBSTSNE,ident.1 = x,min.pct = 0.25)
+) -> cluster.markers
+
+# This adds the cluster number to the results of FindMarkers
+sapply(0:(length(cluster.markers)-1),function(x) {
+  cluster.markers[[x+1]]$gene <<- rownames(cluster.markers[[x+1]])
+  cluster.markers[[x+1]]$cluster <<- x
+})
+
+# Finally we collapse the list of hits down to a single table and sort it by FDR to put the most significant ones first
+as_tibble(do.call(rbind,cluster.markers)) %>% arrange(p_val_adj) -> cluster.markers
+cluster.markers
+
+#prints to file
+write.csv(cluster.markers, "3FBS_allClusters_Genes_2024March.csv")
+```
+
+```{r }
+#Get counts for each gene in each cluster
+
+matrix <- AverageExpression(object = Lv3FBSTSNE)$RNA
+write.csv(matrix, "Lv_3FBS_GeneCount_allClusters_2024March.csv")
+```
