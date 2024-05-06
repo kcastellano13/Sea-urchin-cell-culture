@@ -1,0 +1,28 @@
+Condition	Gene	Percent
+FBS05	Cyclin A - G2	5.00
+FBS10	Cyclin A - G2	8.00
+FBS15	Cyclin A - G2	11.00
+FBS05	Cyclin B	7.00
+FBS10	Cyclin B	6.00
+FBS15	Cyclin B	11.00
+FBS05	Cyclin D	35.00
+FBS10	Cyclin D	49.00
+FBS15	Cyclin D	61.00
+FBS05	Cyclin E	4.00
+FBS10	Cyclin E	7.00
+FBS15	Cyclin E	8.00
+FBS05	MYC	27.70
+FBS10	MYC	33.90
+FBS15	MYC	46.50
+FBS05	PCNA	17.50
+FBS10	PCNA	23.60
+FBS15	PCNA	24.40
+FBS05	DNA_polymerase_delta_subunit_3-like	25.20
+FBS10	DNA_polymerase_delta_subunit_3-like	27.30
+FBS15	DNA_polymerase_delta_subunit_3-like	39.50
+FBS05	DNA_polymerase_delta_subunit_4-like	17.40
+FBS10	DNA_polymerase_delta_subunit_4-like	25.10
+FBS15	DNA_polymerase_delta_subunit_4-like	31.90
+FBS05	DNA_polymerase_epsilon_subunit_3-like	26.60
+FBS10	DNA_polymerase_epsilon_subunit_3-like	36.70
+FBS15	DNA_polymerase_epsilon_subunit_3-like	38.00

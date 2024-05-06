@@ -1,0 +1,13 @@
+Condition	Gene	Percent
+FBS05	1_Muscle	10.45
+FBS10	1_Muscle	7.36
+FBS15	1_Muscle	3.28
+FBS05	2_Pigment	5.77
+FBS10	2_Pigment	1.40
+FBS15	2_Pigment	1.08
+FBS05	3_Endoderm	7.32
+FBS10	3_Endoderm	14.77
+FBS15	3_Endoderm	2.26
+FBS05	4_Nerve	1.72
+FBS10	4_Nerve	0.70
+FBS15	4_Nerve	11.23

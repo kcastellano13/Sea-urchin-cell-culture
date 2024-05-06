@@ -1,0 +1,13 @@
+Condition	Gene	Percent
+FBS05	Nanos	0
+FBS10	Nanos	2
+FBS15	Nanos	12
+FBS05	Seawi_L1	39
+FBS10	Seawi_L1	44
+FBS15	Seawi_L1	60
+FBS05	Seawi_L2	5
+FBS10	Seawi_L2	7
+FBS15	Seawi_L2	11
+FBS05	Vasa	8
+FBS10	Vasa	14
+FBS15	Vasa	23

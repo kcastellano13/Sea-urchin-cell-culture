@@ -1,0 +1,32 @@
+---
+title: "Lvar Single Cell Cell Marker bar plots"
+output: html_document
+date: "2024-01-03"
+---
+
+setwd("C:/Users/kate.castellano/OneDrive - Gloucester Marine Genomics Institute/Documents/KCastellano/SeaUrchin/SeaUrchin_Data/2023Aug_CellCulture_ManuscriptDrafts/Figures/")
+
+```{r }
+##Make bar plots for single cell - percentage of cells expressing certain cell type markers
+#Figure 3
+
+prolif <- read.table("PercCellsStemMarkers_2.txt", header=T)
+cellcycle <- read.table("PercCellsCellCycle.txt", header=T)
+celltypes <- read.table("PercCells_MusclePigmentEndodermNerve.txt", header = T)
+
+ggplot(prolif, aes(fill=Condition, y=Percent, x=Gene)) +
+geom_bar(position="dodge", stat="identity") +
+theme_bw()
+
+
+ggplot(cellcycle, aes(fill=Condition, y=Percent, x=Gene)) +
+  geom_bar(position="dodge", stat="identity") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+
+ggplot(celltypes, aes(fill=Condition, y=Percent, x=Gene)) +
+  geom_bar(position="dodge", stat="identity") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
