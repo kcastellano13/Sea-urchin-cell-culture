@@ -134,7 +134,9 @@ length(countData_m[,1]) #26301
 #26301 - 22131 = 4,170 genes removed with no counts in any condition
 ```
 
-- at this point the counts table can be used to make MDS plot (I transfer merged counts table to computer and run in R - uses TCseq to make MDS plot.
+- at this point the counts table can be used to make MDS plot (I transfer merged counts table to computer and run in R - uses TCseq to make MDS plot)
+- The R file with the scripts for making the MDS plot is available above:
+    - FBS_allconditions_MDSplot_Heatmaps.RMD
 
 ```{r }
 #transpose rows and columns for TPM analysis to make each column represent a gene and each row represent a sample
@@ -162,3 +164,6 @@ countsTable_transform <- as.data.frame(t(countsTable.. #the transpose function w
 
 write.table(countsTable_transform, "FBStimecourseAll_noZeros_TPM_Transpose.tsv", sep = "\t", quote = FALSE.
 ```
+## 10. Heatmaps created to look for gene expression changes between days in each condition (5%, 10% and 15% FBS)
+- See the R file above for how the heatmaps were made:
+    - FBS_allconditions_MDSplot_Heatmaps.RMD
