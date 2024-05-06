@@ -1,5 +1,5 @@
 
-# Single-cell sequencing
+# *L. variegatus* cell culture single-cell analysis
 
 ## 1. Demultiplex and generate fastq files from Illumina basecalls
 - program: cellranger-6.1.2
