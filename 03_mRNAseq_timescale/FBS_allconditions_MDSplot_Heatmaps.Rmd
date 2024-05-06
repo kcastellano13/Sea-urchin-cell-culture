@@ -1,0 +1,163 @@
+---
+title: "Lvar Cell Culture Timepoints - MDS plot and Heatmaps"
+output: html_document
+date: "2024-01-03"
+---
+
+```{r }
+library(edgeR)
+```
+
+```{r }
+#read in file (see step 7 in the README for more information on how this file was created)
+countsTable <- read.table("FBStimecourse_combined_readCount.tsv", header = TRUE)
+```
+
+```{r }
+#recount columns so the id column is column 0 instead of 1 (samples = columns 1-22)
+countData_m <- countsTable[,-1]
+#make it a matrix
+countData_m = as.matrix(countData_m)
+#add back id row names
+rownames(countData_m) <- countsTable[,1]
+```
+
+```{r mds plot}
+#make an MDS plot to look at dissimilarity between samples
+Shape<- c(15,15,15,15,15,16,16,16,16,16,17,17,17,17,17) #15=filled square (5%), 16=filled circle (10%), 17=filled triangle pointing up (15%)
+Color<- c("red", "blue", "green", "magenta", "purple","red", "blue", "green", "magenta", "purple", "red", "blue", "green", "magenta", "purple") #colors=days in culture 20, 182, 313,445 and 738
+plotMDS(countData_m, pch=Shape, col=Color, cex=2)
+legend("topright", pch=c(15,16,17), legend=c("5%","10%", "15%"))
+#legend("top", pch=Colors, legend=c("Day 20","Day 182", "Day 313", "Day 445", "Day 738"))
+```
+
+
+#To see how TPM analyses was completed please refer to steps 7-9 in the README file
+#The next steps show how the heatmaps of TPM expression values were made for each condition
+```{r }
+#Make heatmaps comparing TPM expression values 5FBS conditions
+
+library(pheatmap)
+#load data
+TPM_5FBS <- data.frame(read.table("5FBStimecourseAll_noZeros_TPM_Transpose_Annotations.txt", sep = "\t", header = TRUE))
+#set first column as index
+TPM_5FBS <- data.frame(TPM_5FBS[,-1], row.names = TPM_5FBS[,1])
+
+#make pheatmap
+out <- pheatmap(TPM_5FBS, 
+         scale="row",
+         cluster_cols = FALSE, show_rownames= FALSE)
+
+
+#Get a table (as a mtrix) of all of the genes in the order/clustering of the heatmap (top-to-bottom)
+res <- TPM_5FBS[c(out$tree_row[["order"]]),]
+#add annotations
+annot <- read.table("Lvar_annotations.txt", sep = "\t", header = TRUE, quote = "")
+
+#move the gene names from the index to a column to match on when merge
+res <- cbind(FeatureName = rownames(res), res)
+rownames(res) <- 1:nrow(res)
+
+#merge
+library(dplyr)
+new_res <- right_join(res, annot, by="FeatureName")
+
+write.table(new_res, "5FBS_TPM_pheatmap.tsv", sep = "\t", quote = FALSE, row.names = FALSE)
+
+```
+
+```{r }
+#Make heatmaps comparing TPM expression values 10FBS conditions
+
+library(pheatmap)
+#load data
+TPM_10FBS <- data.frame(read.table("10FBStimecourseAll_noZeros_TPM_Transpose_Annotations.txt", sep = "\t", header = TRUE))
+#set first column as index
+TPM_10FBS <- data.frame(TPM_10FBS[,-1], row.names = TPM_10FBS[,1])
+
+
+## remove any genes that are not covered by any of the samples
+## ie, if there are no read counts in any of the samples, remove this gene
+## ASC can handle zero count data, but I filter it out anyway
+fdta <- TPM_10FBS[!apply(TPM_10FBS[, 1:5], 1, function(x) all(x==0)),]
+length(fdta[,1]) #7420
+  #original file
+  length(TPM_10FBS[,1]) #9984 - 7420 = 2,564 genes removed with no counts in any   condition
+  
+#convert back to data frame
+TPM_10FBS <- as.data.frame(fdta)
+
+
+#make pheatmap
+out <- pheatmap(TPM_10FBS, 
+         scale="row",
+         cluster_cols = FALSE, show_rownames= FALSE)
+
+
+#Get a table (as a mtrix) of all of the genes in the order/clustering of the heatmap (top-to-bottom)
+res <- TPM_10FBS[c(out$tree_row[["order"]]),]
+#add annotations
+annot <- read.table("Lvar_annotations.txt", sep = "\t", header = TRUE, quote = "")
+
+#move the gene names from the index to a column to match on when merge
+res <- cbind(FeatureName = rownames(res), res)
+rownames(res) <- 1:nrow(res)
+
+#merge
+library(dplyr)
+new_res <- right_join(res, annot, by="FeatureName")
+
+#remove rows with NAs
+new_res <- na.omit(new_res)
+
+write.table(new_res, "10FBS_TPM_pheatmap.tsv", sep = "\t", quote = FALSE, row.names = FALSE)
+
+```
+
+```{r }
+#Make heatmaps comparing TPM expression values 15FBS conditions
+
+library(pheatmap)
+#load data
+TPM_15FBS <- data.frame(read.table("15FBStimecourseAll_noZeros_TPM_Transpose_Annotations.txt", sep = "\t", header = TRUE))
+#set first column as index
+TPM_15FBS <- data.frame(TPM_15FBS[,-1], row.names = TPM_15FBS[,1])
+
+
+## remove any genes that are not covered by any of the samples
+## ie, if there are no read counts in any of the samples, remove this gene
+## ASC can handle zero count data, but I filter it out anyway
+fdta <- TPM_15FBS[!apply(TPM_15FBS[, 1:5], 1, function(x) all(x==0)),]
+length(fdta[,1]) #7200
+  #original file
+  length(TPM_15FBS[,1]) #9984 - 7200 = 2,784 genes removed with no counts in any   condition
+  
+#convert back to data frame
+TPM_15FBS <- as.data.frame(fdta)
+
+
+#make pheatmap
+out <- pheatmap(TPM_15FBS, 
+         scale="row",
+         cluster_cols = FALSE, show_rownames= FALSE)
+
+
+#Get a table (as a mtrix) of all of the genes in the order/clustering of the heatmap (top-to-bottom)
+res <- TPM_15FBS[c(out$tree_row[["order"]]),]
+#add annotations
+annot <- read.table("Lvar_annotations.txt", sep = "\t", header = TRUE, quote = "")
+
+#move the gene names from the index to a column to match on when merge
+res <- cbind(FeatureName = rownames(res), res)
+rownames(res) <- 1:nrow(res)
+
+#merge
+library(dplyr)
+new_res <- right_join(res, annot, by="FeatureName")
+
+#remove rows with NAs
+new_res <- na.omit(new_res)
+
+write.table(new_res, "15FBS_TPM_pheatmap.tsv", sep = "\t", quote = FALSE, row.names = FALSE)
+
+```
