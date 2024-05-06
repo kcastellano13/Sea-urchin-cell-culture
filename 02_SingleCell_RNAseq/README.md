@@ -1,7 +1,7 @@
 
 # Single-cell sequencing
 
-## 1. Demultiplex and generate fastq files from Illumina basecalls (demultiplexing Illumina base call files (BCL))
+## 1. Demultiplex and generate fastq files from Illumina basecalls
 - program: cellranger-6.1.2
 - script: 01_cellranger_mkfastq
 
