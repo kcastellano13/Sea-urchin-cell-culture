@@ -1,7 +1,7 @@
 # Validating the identity of the cells in culture using 18S rDNA targeted amplicon sequencing
 
 1) QC raw data using FastQC v0.11.10.devel <br>
-*_script:_ 01_fastqc_rawdata.sh
+* _script:_ 01_fastqc_rawdata.sh
 
 2) Trim reads using Trimmomatic version 0.38 and then check the quality of trimmed reads using FastQC v0.11.10.devel
 _script:_ 02_qualityFilter
