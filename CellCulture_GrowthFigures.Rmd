@@ -1,0 +1,79 @@
+---
+title: "Lvar Cell Culture Growth Plots"
+output: html_document
+date: "2024-01-03"
+---
+```{r }
+# Load Libraries
+library(ggplot2)
+library(dplyr)
+```
+
+```{r }
+##Make line/scatter plot for cell culture population doubling (PDL) and cell viability (CV)
+##Figure 1
+PDL <- read.table("PDL.txt", sep="\t", header=T)
+
+# Plot
+ggplot() +
+  geom_line(data = PDL, mapping = aes(x=Day, y=UM.3.), color = "#1982c4") +
+  geom_point(data = PDL, mapping = aes(x=Day, y=UM.3.),color = "#1982c4") +
+  geom_line(data = PDL, mapping = aes(x=Day, y=UM.3.5.), color = "#ffca3a") +
+  geom_point(data = PDL, mapping = aes(x=Day, y=UM.3.5.), color = "#ffca3a") +
+  geom_line(data = PDL, mapping = aes(x=Day, y=EB.UM.3.5.), color = "#8ac926") +
+  geom_point(data = PDL, mapping = aes(x=Day, y=EB.UM.3.5.), color = "#8ac926") +
+  geom_line(data = PDL, mapping = aes(x=Day, y=UM.10.), color = "#FF595E") +
+  geom_point(data = PDL, mapping = aes(x=Day, y=UM.10.), color = "#FF595E") +
+  geom_line(data = PDL, mapping = aes(x=Day, y=UM.15.), color = "#6a4c93") +
+  geom_point(data = PDL, mapping = aes(x=Day, y=UM.15.), color = "#6a4c93") +
+  theme_bw()
+
+
+CV <- read.table("CellViability.txt", sep="\t", header=T)
+
+# Plot
+ggplot() +
+  geom_line(data = CV, mapping = aes(x=Day, y=UM.3.), color = "#1982c4") +
+  geom_point(data = CV, mapping = aes(x=Day, y=UM.3.),color = "#1982c4") +
+  geom_line(data = CV, mapping = aes(x=Day, y=UM.3.5.), color = "#ffca3a") +
+  geom_point(data = CV, mapping = aes(x=Day, y=UM.3.5.), color = "#ffca3a") +
+  geom_line(data = CV, mapping = aes(x=Day, y=EB.UM.3.5.), color = "#8ac926") +
+  geom_point(data = CV, mapping = aes(x=Day, y=EB.UM.3.5.), color = "#8ac926") +
+  geom_line(data = CV, mapping = aes(x=Day, y=UM.10.), color = "#FF595E") +
+  geom_point(data = CV, mapping = aes(x=Day, y=UM.10.), color = "#FF595E") +
+  geom_line(data = CV, mapping = aes(x=Day, y=UM.15.), color = "#6a4c93") +
+  geom_point(data = CV, mapping = aes(x=Day, y=UM.15.), color = "#6a4c93") +
+  theme_bw()
+```
+
+```{r }
+##Figure 2
+PDL_FBSperc <- read.table("PDL_FBSperc.txt", sep="\t", header=T)
+
+# Plot
+ggplot() +
+  geom_line(data = PDL_FBSperc, mapping = aes(x=Day, y=FBS3), color = "#1982c4") +
+  geom_point(data = PDL_FBSperc, mapping = aes(x=Day, y=FBS3),color = "#1982c4") +
+  geom_line(data = PDL_FBSperc, mapping = aes(x=Day, y=FBS5), color = "#6a4c93") +
+  geom_point(data = PDL_FBSperc, mapping = aes(x=Day, y=FBS5), color = "#6a4c93") +
+  geom_line(data = PDL_FBSperc, mapping = aes(x=Day, y=FBS10), color = "#8ac926") +
+  geom_point(data = PDL_FBSperc, mapping = aes(x=Day, y=FBS10), color = "#8ac926") +
+  geom_line(data = PDL_FBSperc, mapping = aes(x=Day, y=FBS15), color = "#FF595E") +
+  geom_point(data = PDL_FBSperc, mapping = aes(x=Day, y=FBS15), color = "#FF595E") +
+  theme_bw()
+
+
+CV_FBSperc <- read.table("CellViability_FBSperc.txt", sep="\t", header=T)
+
+# Plot
+ggplot() +
+  geom_line(data = CV_FBSperc, mapping = aes(x=Day, y=FBS3), color = "#1982c4") +
+  geom_point(data = CV_FBSperc, mapping = aes(x=Day, y=FBS3),color = "#1982c4") +
+  geom_line(data = CV_FBSperc, mapping = aes(x=Day, y=FBS5), color = "#6a4c93") +
+  geom_point(data = CV_FBSperc, mapping = aes(x=Day, y=FBS5), color = "#6a4c93") +
+  geom_line(data = CV_FBSperc, mapping = aes(x=Day, y=FBS10), color = "#8ac926") +
+  geom_point(data = CV_FBSperc, mapping = aes(x=Day, y=FBS10), color = "#8ac926") +
+  geom_line(data = CV_FBSperc, mapping = aes(x=Day, y=FBS15), color = "#FF595E") +
+  geom_point(data = CV_FBSperc, mapping = aes(x=Day, y=FBS15), color = "#FF595E") +
+  theme_bw()
+```
