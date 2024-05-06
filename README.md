@@ -1,8 +1,8 @@
 # Establishment of sea urchin (L. variegatus) embryonic cell lines
 
-## The raw single cell RNA-sequencing and bulk RNA-sequencing data associated with this project are affiliated with NCBI BioProject XXXXXX
+### The raw single cell RNA-sequencing and bulk RNA-sequencing data associated with this project are affiliated with NCBI BioProject XXXXXX
 
-### Validating the identity of the cells in culture using 16S rDNA PCR and 18S rDNA targeted amplicon sequencing
+## Validating the identity of the cells in culture using 16S rDNA PCR and 18S rDNA targeted amplicon sequencing
 The cell pellets used for identification include:
         TABLE
 
@@ -13,7 +13,7 @@ The cell pellets used for identification include:
 
 Extraction and sequencing was performed by Kate Castellano and Reanna McAtee
 
-### Single-cell RNA sequencing 
+## Single-cell RNA sequencing 
 Single-cell RNA sequencing was performed on cells:
         TABLE
 
@@ -25,7 +25,7 @@ Single-cell RNA sequencing was performed on cells:
 Single cell extraction, library preparation and analysis were performed by Kate Castellano
 Single Cell sequencing was performed by the Center for Genome Innovation (CGI) at the University of connecticut
 
-### mRNA Sequencing of whole cell cultures
+## mRNA Sequencing of whole cell cultures
 Samples used for mRNA sequencing:
         TABLE
     
