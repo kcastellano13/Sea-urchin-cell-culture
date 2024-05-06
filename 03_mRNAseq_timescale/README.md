@@ -33,31 +33,31 @@
 - program: gtf tools v0.9.0 (https://www.genemine.org/gtftools.php.
 
     ##### A. Rename L. var chromsomes because gtf tools only accepts chromosome in human format (so 1-22.
-Edit file with sed - Chromosome number associations are from NCBI (https://www.ncbi.nlm.nih.gov/datasets/genome/GCF_018143015.1/.
-```
-sed -i 's/CM031015.1/1/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
-sed -i 's/CM031016.1/2/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
-sed -i 's/CM031017.1/3/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
-sed -i 's/CM031018.1/4/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
-sed -i 's/CM031019.1/5/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
-sed -i 's/CM031020.1/6/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
-sed -i 's/CM031021.1/7/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
-sed -i 's/CM031022.1/8/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
-sed -i 's/CM031023.1/9/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
-sed -i 's/CM031024.1/10/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
-sed -i 's/CM031025.1/11/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
-sed -i 's/CM031026.1/12/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
-sed -i 's/CM031027.1/13/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
-sed -i 's/CM031028.1/14/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
-sed -i 's/CM031029.1/15/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
-sed -i 's/CM031030.1/16/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
-sed -i 's/CM031031.1/17/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
-sed -i 's/CM031032.1/18/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
-sed -i 's/CM031033.1/19/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
-sed -i 's/MG676468.1/20/g' GCF_018143015.1_Lvar_3.0_genomic.gtf #mitochondrial but just labeled as a number for gtf tools
-```
+    Edit file with sed - Chromosome number associations are from NCBI (https://www.ncbi.nlm.nih.gov/datasets/genome/GCF_018143015.1/.
+    ```
+    sed -i 's/CM031015.1/1/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
+    sed -i 's/CM031016.1/2/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
+    sed -i 's/CM031017.1/3/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
+    sed -i 's/CM031018.1/4/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
+    sed -i 's/CM031019.1/5/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
+    sed -i 's/CM031020.1/6/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
+    sed -i 's/CM031021.1/7/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
+    sed -i 's/CM031022.1/8/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
+    sed -i 's/CM031023.1/9/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
+    sed -i 's/CM031024.1/10/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
+    sed -i 's/CM031025.1/11/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
+    sed -i 's/CM031026.1/12/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
+    sed -i 's/CM031027.1/13/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
+    sed -i 's/CM031028.1/14/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
+    sed -i 's/CM031029.1/15/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
+    sed -i 's/CM031030.1/16/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
+    sed -i 's/CM031031.1/17/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
+    sed -i 's/CM031032.1/18/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
+    sed -i 's/CM031033.1/19/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
+    sed -i 's/MG676468.1/20/g' GCF_018143015.1_Lvar_3.0_genomic.gtf #mitochondrial but just labeled as a number for gtf tools
+    ```
     ##### B. Get gene lengths of merged exons via gtf tools
-###### -l = Calculate gene lengths. Since a gene may have multiple isoforms, there are multiple ways to calculate gene length based on literature. Three simple ways are considering the mean, median and maximum of the lengths of isoforms as the length of the gene. A fourth way is to calculate the length of merged exons of all isoforms (i.e. non-overlapping exonic length.. So, in total, four different types of gene lengths(the mean, median and max of lengths of isoforms of agene, and the length of merged exons of isoforms of a gene. are provided. format. Needed for e.g. calculating FPKM in RNA-seq data analysis, where gene length is required.
+    ###### -l = Calculate gene lengths. Since a gene may have multiple isoforms, there are multiple ways to calculate gene length based on literature. Three simple ways are considering the mean, median and maximum of the lengths of isoforms as the length of the gene. A fourth way is to calculate the length of merged exons of all isoforms (i.e. non-overlapping exonic length.. So, in total, four different types of gene lengths(the mean, median and max of lengths of isoforms of agene, and the length of merged exons of isoforms of a gene. are provided. format. Needed for e.g. calculating FPKM in RNA-seq data analysis, where gene length is required.
 
 ```
 python GTFtools_0.9.0/gtftools.py -l Lvar3.0_exon_length.txt GCF_018143015.1_Lvar_3.0_genomic.gtf
