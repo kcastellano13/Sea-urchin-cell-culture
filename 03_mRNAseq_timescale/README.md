@@ -15,13 +15,13 @@
 
 ## 4. Map reads to the L. variegatus genome
 - program: histat2/v2.2.1
-    ### A. Make the L. var v3.0 genome into a hisat index
-    -script: 04_hisat_index.sh
+    ##### A. Make the L. var v3.0 genome into a hisat index
+    - script: 04_hisat_index.sh
 
-    ### B. Map read to L. var v3.0 genome 
+    ##### B. Map read to L. var v3.0 genome 
     - script: 05_hisat.sh
 
-    ### C. Alignment QC - get summary stats to make sure the alignment itself went ok 
+    ##### C. Alignment QC - get summary stats to make sure the alignment itself went ok 
     - script: 06_hisat_summaryStats.sh
 
 ## 5. Create count files for TPM analysis
@@ -32,7 +32,7 @@
 - htseq only counts alignments to exons so use GTF tools to get exon lengths for TPM analysis
 - program: gtf tools v0.9.0 (https://www.genemine.org/gtftools.php.
 
-A. Rename L. var chromsomes because gtf tools only accepts chromosome in human format (so 1-22.
+    ##### A. Rename L. var chromsomes because gtf tools only accepts chromosome in human format (so 1-22.
 Edit file with sed - Chromosome number associations are from NCBI (https://www.ncbi.nlm.nih.gov/datasets/genome/GCF_018143015.1/.
 ```
 sed -i 's/CM031015.1/1/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
@@ -56,8 +56,8 @@ sed -i 's/CM031032.1/18/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
 sed -i 's/CM031033.1/19/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
 sed -i 's/MG676468.1/20/g' GCF_018143015.1_Lvar_3.0_genomic.gtf #mitochondrial but just labeled as a number for gtf tools
 ```
-B. Get gene lengths of merged exons via gtf tools
-### -l = Calculate gene lengths. Since a gene may have multiple isoforms, there are multiple ways to calculate gene length based on literature. Three simple ways are considering the mean, median and maximum of the lengths of isoforms as the length of the gene. A fourth way is to calculate the length of merged exons of all isoforms (i.e. non-overlapping exonic length.. So, in total, four different types of gene lengths(the mean, median and max of lengths of isoforms of agene, and the length of merged exons of isoforms of a gene. are provided. format. Needed for e.g. calculating FPKM in RNA-seq data analysis, where gene length is required.
+    ##### B. Get gene lengths of merged exons via gtf tools
+###### -l = Calculate gene lengths. Since a gene may have multiple isoforms, there are multiple ways to calculate gene length based on literature. Three simple ways are considering the mean, median and maximum of the lengths of isoforms as the length of the gene. A fourth way is to calculate the length of merged exons of all isoforms (i.e. non-overlapping exonic length.. So, in total, four different types of gene lengths(the mean, median and max of lengths of isoforms of agene, and the length of merged exons of isoforms of a gene. are provided. format. Needed for e.g. calculating FPKM in RNA-seq data analysis, where gene length is required.
 
 ```
 python GTFtools_0.9.0/gtftools.py -l Lvar3.0_exon_length.txt GCF_018143015.1_Lvar_3.0_genomic.gtf
