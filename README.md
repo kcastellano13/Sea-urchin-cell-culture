@@ -1,4 +1,4 @@
-# Establishment of sea urchin (L. variegatus) embryonic cell lines
+# Establishment of sea urchin (*L. variegatus*) embryonic cell lines
 
 ### The raw single cell RNA-sequencing and bulk RNA-sequencing data associated with this project are affiliated with NCBI BioProject XXXXXX
 
