@@ -1,4 +1,4 @@
-# Differential Expression analysis of L. variegatus Cell Culture time series
+# Differential Expression analysis of *L. variegatus* Cell Culture time series
 ### Samples: 5%, 10% and 15% each on Day 20, 182, 313, 445, 738
 
 ## 1. Check Data quality 
@@ -9,7 +9,7 @@
 - program: Trimmomatic/v0.39
 - script: 02_trimmomatic.sh
 
-## 3. Check Data quality after trimming (fastqc/v0.12.1 nad multiQC/v1.16.
+## 3. Check Data quality after trimming
 - program: fastqc/v0.12.1
 - script: 03_trimmomaticfastqc.sh
 
@@ -30,7 +30,7 @@
 
 ## 6. Get Gene lengths for TPM analysis
 - htseq only counts alignments to exons so use GTF tools to get exon lengths for TPM analysis
-- program: gtf tools v0.9.0 (https://www.genemine.org/gtftools.php.
+- program: gtf tools v0.9.0 (https://www.genemine.org/gtftools.php)
 
 ##### A. Rename L. var chromsomes because gtf tools only accepts chromosome in human format (so 1-22)
 
@@ -130,6 +130,7 @@ length(fdta[,1]) #22131
 
 #original file
 length(countData_m[,1]) #26301
+
 #26301 - 22131 = 4,170 genes removed with no counts in any condition
 ```
 
