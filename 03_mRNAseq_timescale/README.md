@@ -35,6 +35,7 @@
 ##### A. Rename L. var chromsomes because gtf tools only accepts chromosome in human format (so 1-22)
 
     Edit file with sed - Chromosome number associations are from NCBI ([GCF_018143015.1](https://www.ncbi.nlm.nih.gov/datasets/genome/GCF_018143015.1/))
+    
     ```
     sed -i 's/CM031015.1/1/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
     sed -i 's/CM031016.1/2/g' GCF_018143015.1_Lvar_3.0_genomic.gtf
@@ -60,13 +61,15 @@
 ##### B. Get gene lengths of merged exons via gtf tools
 
     ###### -l = Calculate gene lengths. Since a gene may have multiple isoforms, there are multiple ways to calculate gene length based on literature. Three simple ways are considering the mean, median and maximum of the lengths of isoforms as the length of the gene. A fourth way is to calculate the length of merged exons of all isoforms (i.e. non-overlapping exonic length.. So, in total, four different types of gene lengths(the mean, median and max of lengths of isoforms of agene, and the length of merged exons of isoforms of a gene. are provided. format. Needed for e.g. calculating FPKM in RNA-seq data analysis, where gene length is required.
+    
     ```
     python GTFtools_0.9.0/gtftools.py -l Lvar3.0_exon_length.txt GCF_018143015.1_Lvar_3.0_genomic.gtf
     #make a file with the gene ID and the merged column to use for TPM analysis. I do not care about isoforms in this case and want all counts associated with the gene so that is why I chose the merged exon count column
     awk -v OFS="\t" '{print $1,$5}' Lvar3.0_exon_length.txt > Lvar3.0_exonMerged_length.txt
     ```
 
-## 7. Prepare data for TPM analysis in R v2023.09.1
+## 7. Prepare data for TPM analysis
+- Program: R v2023.09.1
 ```{r import and reformat tables}
 #in excel manually remove rows at the bottom (alignment not unique, ambiguous, no feature, not aligned, too low quality.
 FBS5_D20 <- data.frame(read.table("trim_5FBS_D20_S276.counts", sep="\t"..
@@ -105,12 +108,11 @@ colnames(FBS15_D738. <- c("target_id", "FBS15_D738count".
 
 ```{r merge tables}
 #merge table to make count table
-### merge subsets -- all stages ###
 countsTable <- Reduce(function (x,y. merge(x=x, y=y, by="target_id"., list(FBS5_D20, FBS5_D182, FBS5_D313, FBS5_D445, FBS5_D738, FBS10_D20,FBS10_D182, FBS10_D313, FBS10_D445, FBS10_D738, FBS15_D20, FBS15_D182, FBS15_D313, FBS15_D445, FBS15_D738..
-
 
 #remove rows 1-5 which have some summary stats (alignment not unique, ambiguous, no feature, not aligned, too low quality.
 countsTable <- countsTable[-c(1, 2, 3, 4, 5., ]
+
 #reset row numbers to start with 1
 rownames(countsTable. <- 1:nrow(countsTable.
 
@@ -126,8 +128,8 @@ length(fdta[,1]. #22131
 #original file
 length(countData_m[,1]. #26301 - 22131 = 4,170 genes removed with no counts in any   condition
 ```
-#at this point the counts table can be used to make MDS plot (I transfer merged counts table to computer and run in R - uses TCseq to make MDS plot.
 
+- at this point the counts table can be used to make MDS plot (I transfer merged counts table to computer and run in R - uses TCseq to make MDS plot.
 
 ```{r }
 #transpose rows and columns for TPM analysis to make each column represent a gene and each row represent a sample
@@ -138,13 +140,14 @@ write.table(test, "FBStimecourseAll_noZeros_Transpose.tsv", sep = "\t", quote = 
 
 # and without row names for TPM pipeline
 write.table(test, "FBStimecourseAll_noZeros_Transpose.tsv", row.names=FALSE, sep = "\t", quote = FALSE.
-
 ```
-## 8. Convert counts to TPM
-- _program:_ python3
-- _script:_ 08_convert_to_tpm.py
 
-## 9. transpose the file again to swap rows and columns so that the rows represent genes and columns represent samples, done in R
+## 8. Convert counts to TPM
+- program: python3
+- script: 08_convert_to_tpm.py
+
+## 9. transpose the file again to swap rows and columns so that the rows represent genes and columns represent samples
+- program: R v2023.09.1
 ```{r }
 #read table back in
 countsTable <- read.table("FBStimecourseAll_noZeros_TPM.csv", sep = "," , header = TRUE.
