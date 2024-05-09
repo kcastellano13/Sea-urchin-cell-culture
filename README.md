@@ -1,6 +1,6 @@
 # Establishment of sea urchin (*L. variegatus*) embryonic cell lines
 
-### The raw single cell RNA-sequencing and bulk RNA-sequencing data associated with this project are affiliated with NCBI BioProject XXXXXX
+### The raw single cell RNA-sequencing and bulk RNA-sequencing data associated with this project are affiliated with NCBI BioProject PRJNA1109820
 
 ## Validating the identity of the cells in culture using 16S rDNA PCR and 18S rDNA targeted amplicon sequencing
 The cell pellets used for identification include:
