@@ -3,9 +3,6 @@
 ### The raw single cell RNA-sequencing and bulk RNA-sequencing data associated with this project are affiliated with NCBI BioProject PRJNA1109820
 
 ## Validating the identity of the cells in culture using 16S rDNA PCR and 18S rDNA targeted amplicon sequencing
-The cell pellets used for identification include:
-        TABLE
-
 - DNA was extracted following a modified CTAB extraction procedure (please reference publication for additional information).
 - Amplification of 18S rDNA was conducted with the following primers: F:GCTTGTCTCAAAGATTAAGCC, R: GCCTGCTGCTGCCTTCCTTGGA (Blaxter et al., 1998)
 - Samples were sequenced on an Illumina Miseq Reagent Kit v3 to generate 2 × 300 bp overlapping paired-end reads
@@ -26,11 +23,9 @@ Single cell extraction, library preparation and analysis were performed by Kate 
 Single Cell sequencing was performed by the Center for Genome Innovation (CGI) at the University of connecticut
 
 ## mRNA Sequencing of whole cell cultures
-Samples used for mRNA sequencing:
-        TABLE
-    
+- Cell pellets from each of 3, 5, 10 and 15% FBS media conditions were collected on Day 20, 182, 313, 445 and 738 for mRNA sequencing
 - RNA was extracted from each pellet using the RNeasy® Plus Mini Kit (Qiagen) following the manufacturer’s instructions
-- mRNA was prepared using the Truseq Stranded RNA sequencing kit and sequenced on the Illumina NovaSeq 6000
-- Bioinformatic analysis of the data can be found in the "03_Amplicon_Sequencing" folder above
+- mRNA was prepared using the Truseq Stranded RNA sequencing kit and sequenced on the Illumina NovaSeq 6000, SP 200 cycle kit v1.5 
+- Bioinformatic analysis of the data can be found in the "03_mRNAseq_timescale" folder above
 
 RNA extraction and analysis were performed by Kate Castellano
