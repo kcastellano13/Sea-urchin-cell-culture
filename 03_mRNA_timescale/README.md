@@ -165,9 +165,10 @@ write.table(countsTable_transform, "Lv_FBStimecourseAll_noZeros_TPM.tsv", sep = 
 ```
 
 ## Clustering of time-course RNAseq data.
-# Analysis by RMK is based on methods in Chille et al 2021: https://github.com/echille/Mcapitata_OA_Developmental_Gene_Expression_Timeseries/blob/main/3-WGCNA/WGCNA.Rmd
-# Manuscript DOI: https://doi.org/10.1242/jeb.243187
+### Analysis by RMK is based on methods in Chille et al 2021: https://github.com/echille/Mcapitata_OA_Developmental_Gene_Expression_Timeseries/blob/main/3-WGCNA/WGCNA.Rmd
+### Manuscript DOI: https://doi.org/10.1242/jeb.243187
 
+```{r }
 #Import necessary libraries
 library("tidyverse")
 library("genefilter")
@@ -755,6 +756,7 @@ plotMDS(gcount_filt_vst_centered_matrix, pch=Shape, col=Color, cex=2, main="MDS 
 legend("topleft", inset=c(0,0), pch=c(15,18,17), legend=c("5% FBS","10% FBS", "15% FBS"), col="black", bty="n", pt.cex=1.5)
 #pch sets the shape of the point
 #inset dictates where the legend appears
+```
 #pt.cex increases the size of the point
 
 #Add legend for timepoints
