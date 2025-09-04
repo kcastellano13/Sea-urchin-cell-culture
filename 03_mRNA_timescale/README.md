@@ -755,7 +755,7 @@ plotMDS(gcount_filt_vst_centered_matrix, pch=Shape, col=Color, cex=2, main="MDS 
 legend("topleft", inset=c(0,0), pch=c(15,18,17), legend=c("5% FBS","10% FBS", "15% FBS"), col="black", bty="n", pt.cex=1.5)
 #pch sets the shape of the point
 #inset dictates where the legend appears
-```
+
 #pt.cex increases the size of the point
 
 #Add legend for timepoints
