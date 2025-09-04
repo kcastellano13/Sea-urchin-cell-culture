@@ -267,7 +267,6 @@ nrow(gcount_filt) #After = 3,527
 # Before filtering, we had 9,984 genes. After filtering for pOverA, we have approximately 3,527 genes. This indicates that there were many genes present in <7% of samples at <10 counts per gene.  
 # 
 # In order for the DESeq2 algorithms to work, the SampleIDs on the metadata file and count matrices have to match exactly and in the same order. The following R clump will check to make sure that these match. Should return TRUE. 
-```
 
 # Display current order of metadata and gene count matrix.  
 metadata$sample_name
